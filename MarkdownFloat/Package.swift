@@ -8,7 +8,7 @@ let package = Package(
         .executableTarget(
             name: "MarkdownFloat",
             path: ".",
-            exclude: ["Info.plist", "Makefile"],
+            exclude: ["Info.plist", "Makefile", "MarkdownFloat.app"],
             sources: ["Sources"],
             resources: [
                 .copy("Resources/markdown-template.html"),

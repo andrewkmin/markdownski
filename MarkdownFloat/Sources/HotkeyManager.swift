@@ -3,6 +3,7 @@ import AppKit
 
 class HotkeyManager {
     private var hotkeyRef: EventHotKeyRef?
+    private var handlerRef: EventHandlerRef?
     private var onToggle: () -> Void
 
     init(onToggle: @escaping () -> Void) {
@@ -26,6 +27,7 @@ class HotkeyManager {
 
         // Install handler
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        var handler: EventHandlerRef?
         InstallEventHandler(
             GetApplicationEventTarget(),
             { (_, event, userData) -> OSStatus in
@@ -37,8 +39,9 @@ class HotkeyManager {
             1,
             &eventType,
             selfPtr,
-            nil
+            &handler
         )
+        handlerRef = handler
 
         // Register the hotkey
         var ref: EventHotKeyRef?
@@ -49,6 +52,9 @@ class HotkeyManager {
     deinit {
         if let ref = hotkeyRef {
             UnregisterEventHotKey(ref)
+        }
+        if let handler = handlerRef {
+            RemoveEventHandler(handler)
         }
     }
 }
