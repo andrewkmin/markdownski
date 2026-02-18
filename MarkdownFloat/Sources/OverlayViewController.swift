@@ -101,6 +101,30 @@ class OverlayViewController: NSViewController, NSTextViewDelegate {
         ])
     }
 
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        loadMarkdownTemplate()
+    }
+
+    // MARK: - Template Loading
+
+    private func loadMarkdownTemplate() {
+        guard let templateURL = Bundle.module.url(forResource: "markdown-template", withExtension: "html"),
+              let jsURL = Bundle.module.url(forResource: "markdown-it.min", withExtension: "js") else {
+            NSLog("Failed to find markdown template or JS resources")
+            return
+        }
+
+        do {
+            var html = try String(contentsOf: templateURL, encoding: .utf8)
+            let js = try String(contentsOf: jsURL, encoding: .utf8)
+            html = html.replacingOccurrences(of: "MARKDOWN_IT_JS_HERE", with: js)
+            webView.loadHTMLString(html, baseURL: nil)
+        } catch {
+            NSLog("Failed to load markdown template: \(error)")
+        }
+    }
+
     // MARK: - NSTextViewDelegate
 
     func textDidChange(_ notification: Notification) {
