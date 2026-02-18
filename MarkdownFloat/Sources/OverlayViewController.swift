@@ -1,12 +1,14 @@
 import AppKit
 import WebKit
 
-class OverlayViewController: NSViewController, NSTextViewDelegate {
+class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationDelegate {
     private var scrollView: NSScrollView!
     private var textView: NSTextView!
     private var divider: NSView!
     private var webView: WKWebView!
     private var renderTimer: Timer?
+    private var isTemplateLoaded = false
+    private var pendingRender = false
 
     override func loadView() {
         self.view = NSView()
@@ -73,6 +75,7 @@ class OverlayViewController: NSViewController, NSTextViewDelegate {
         webView = WKWebView(frame: .zero, configuration: config)
         webView.translatesAutoresizingMaskIntoConstraints = false
         webView.underPageBackgroundColor = .clear
+        webView.navigationDelegate = self
         view.addSubview(webView)
     }
 
@@ -134,9 +137,23 @@ class OverlayViewController: NSViewController, NSTextViewDelegate {
         }
     }
 
+    // MARK: - WKNavigationDelegate
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        isTemplateLoaded = true
+        if pendingRender {
+            pendingRender = false
+            renderMarkdown()
+        }
+    }
+
     // MARK: - Rendering
 
     private func renderMarkdown() {
+        guard isTemplateLoaded else {
+            pendingRender = true
+            return
+        }
         let text = textView.string
         let base64 = Data(text.utf8).base64EncodedString()
         webView.evaluateJavaScript("renderMarkdown(atob('\(base64)'))", completionHandler: nil)
@@ -149,9 +166,14 @@ class OverlayViewController: NSViewController, NSTextViewDelegate {
     }
 
     func prefillFromClipboard() {
-        if let clipboardString = NSPasteboard.general.string(forType: .string) {
+        guard textView.string.isEmpty else { return }
+        if let clipboardString = NSPasteboard.general.string(forType: .string), !clipboardString.isEmpty {
             textView.string = clipboardString
             renderMarkdown()
         }
+    }
+
+    deinit {
+        renderTimer?.invalidate()
     }
 }
