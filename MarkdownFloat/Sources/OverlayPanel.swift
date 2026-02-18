@@ -56,6 +56,12 @@ class OverlayPanel: NSPanel {
 
         overlayViewController?.prefillFromClipboard()
 
+        // Start position: slightly below final position
+        let finalFrame = self.frame
+        var startFrame = finalFrame
+        startFrame.origin.y -= 12
+        self.setFrame(startFrame, display: false)
+
         self.alphaValue = 0
         self.orderFrontRegardless()
         self.makeKeyAndOrderFront(nil)
@@ -65,6 +71,7 @@ class OverlayPanel: NSPanel {
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             self.animator().alphaValue = 1
+            self.animator().setFrame(finalFrame, display: true)
         }, completionHandler: { [weak self] in
             self?.isAnimating = false
         })
