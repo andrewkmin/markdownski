@@ -1,7 +1,7 @@
 import AppKit
 
 class OverlayPanel: NSPanel {
-    var overlayViewController: NSViewController?
+    var overlayViewController: OverlayViewController?
     private var isAnimating = false
 
     init() {
@@ -35,6 +35,12 @@ class OverlayPanel: NSPanel {
         visualEffect.layer?.cornerRadius = 16
         visualEffect.layer?.masksToBounds = true
         self.contentView = visualEffect
+
+        let viewController = OverlayViewController()
+        viewController.view.frame = visualEffect.bounds
+        viewController.view.autoresizingMask = [.width, .height]
+        visualEffect.addSubview(viewController.view)
+        self.overlayViewController = viewController
     }
 
     override var canBecomeKey: Bool { true }
@@ -48,6 +54,8 @@ class OverlayPanel: NSPanel {
         guard !isAnimating else { return }
         isAnimating = true
 
+        overlayViewController?.prefillFromClipboard()
+
         self.alphaValue = 0
         self.orderFrontRegardless()
         self.makeKeyAndOrderFront(nil)
@@ -60,6 +68,10 @@ class OverlayPanel: NSPanel {
         }, completionHandler: { [weak self] in
             self?.isAnimating = false
         })
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { [weak self] in
+            self?.overlayViewController?.focusInput()
+        }
     }
 
     func hide() {
