@@ -6,6 +6,7 @@ build:
 	mkdir -p MarkdownFloat.app/Contents/Resources
 	cp .build/release/MarkdownFloat MarkdownFloat.app/Contents/MacOS/
 	cp Info.plist MarkdownFloat.app/Contents/
+	cp -R .build/release/MarkdownFloat_MarkdownFloat.bundle MarkdownFloat.app/Contents/Resources/
 	@echo "Built MarkdownFloat.app"
 
 run: build
