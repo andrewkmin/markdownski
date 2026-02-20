@@ -26,18 +26,21 @@ class OverlayPanel: NSPanel {
         self.hasShadow = true
         self.hidesOnDeactivate = false
         self.isMovableByWindowBackground = true
+        self.appearance = NSAppearance(named: .darkAqua)
 
-        let visualEffect = NSVisualEffectView(frame: frame)
+        let contentBounds = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
+        let visualEffect = NSVisualEffectView(frame: contentBounds)
         visualEffect.material = .sidebar
         visualEffect.state = .active
         visualEffect.blendingMode = .behindWindow
         visualEffect.wantsLayer = true
         visualEffect.layer?.cornerRadius = 16
         visualEffect.layer?.masksToBounds = true
+        visualEffect.autoresizingMask = [.width, .height]
         self.contentView = visualEffect
 
         let viewController = OverlayViewController()
-        viewController.view.frame = visualEffect.bounds
+        viewController.view.frame = contentBounds
         viewController.view.autoresizingMask = [.width, .height]
         visualEffect.addSubview(viewController.view)
         self.overlayViewController = viewController

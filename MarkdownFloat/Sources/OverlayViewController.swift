@@ -4,7 +4,7 @@ import WebKit
 class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationDelegate {
     private var scrollView: NSScrollView!
     private var textView: NSTextView!
-    private var divider: NSView!
+    private var divider: NSBox!
     private var webView: WKWebView!
     private var renderTimer: Timer?
     private var isTemplateLoaded = false
@@ -29,7 +29,17 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         scrollView.scrollerStyle = .overlay
         scrollView.drawsBackground = false
 
-        textView = NSTextView()
+        let textContainer = NSTextContainer()
+        textContainer.widthTracksTextView = true
+        textContainer.heightTracksTextView = false
+
+        let layoutManager = NSLayoutManager()
+        layoutManager.addTextContainer(textContainer)
+
+        let textStorage = NSTextStorage()
+        textStorage.addLayoutManager(layoutManager)
+
+        textView = NSTextView(frame: .zero, textContainer: textContainer)
         textView.isRichText = false
         textView.font = NSFont.systemFont(ofSize: 15)
         textView.textColor = .labelColor
@@ -52,21 +62,20 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
             .paragraphStyle: paragraphStyle
         ]
 
-        // Allow horizontal resizing with scroll view
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
         textView.autoresizingMask = [.width]
-        textView.textContainer?.widthTracksTextView = true
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.minSize = NSSize(width: 0, height: 0)
 
         scrollView.documentView = textView
         view.addSubview(scrollView)
     }
 
     private func setupDivider() {
-        divider = NSView()
+        divider = NSBox()
+        divider.boxType = .separator
         divider.translatesAutoresizingMaskIntoConstraints = false
-        divider.wantsLayer = true
-        divider.layer?.backgroundColor = NSColor.separatorColor.cgColor
         view.addSubview(divider)
     }
 
