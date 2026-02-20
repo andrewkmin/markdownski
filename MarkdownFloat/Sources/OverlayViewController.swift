@@ -11,13 +11,18 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
     private var pendingRender = false
 
     override func loadView() {
-        self.view = NSView()
-        self.view.wantsLayer = true
+        let container = NSView()
+        container.wantsLayer = true
+        self.view = container
+    }
 
+    override func viewDidLoad() {
+        super.viewDidLoad()
         setupScrollView()
         setupDivider()
         setupWebView()
         setupConstraints()
+        loadMarkdownTemplate()
     }
 
     // MARK: - Setup
@@ -29,7 +34,7 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         scrollView.scrollerStyle = .overlay
         scrollView.drawsBackground = false
 
-        let textContainer = NSTextContainer()
+        let textContainer = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         textContainer.widthTracksTextView = true
         textContainer.heightTracksTextView = false
 
@@ -50,8 +55,12 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.delegate = self
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.minSize = NSSize(width: 0, height: 0)
 
-        // Line spacing ~6pt for ~1.5 line height at 15px
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineSpacing = 6
 
@@ -61,12 +70,6 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
             .foregroundColor: NSColor.labelColor,
             .paragraphStyle: paragraphStyle
         ]
-
-        textView.isHorizontallyResizable = false
-        textView.isVerticallyResizable = true
-        textView.autoresizingMask = [.width]
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.minSize = NSSize(width: 0, height: 0)
 
         scrollView.documentView = textView
         view.addSubview(scrollView)
@@ -92,30 +95,20 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         let padding: CGFloat = 24
 
         NSLayoutConstraint.activate([
-            // ScrollView: 24px padding on top, leading, trailing
             scrollView.topAnchor.constraint(equalTo: view.topAnchor, constant: padding),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: padding),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -padding),
-            // ScrollView height = 37% of view height minus padding
-            scrollView.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.37, constant: -padding),
+            scrollView.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.35, constant: -padding),
 
-            // Divider: 1px height, 24px horizontal padding, below scrollView
-            divider.topAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            divider.topAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: 4),
             divider.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: padding),
             divider.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -padding),
-            divider.heightAnchor.constraint(equalToConstant: 1),
 
-            // WebView: below divider, fills remaining space, no bottom padding
-            webView.topAnchor.constraint(equalTo: divider.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: padding),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -padding),
+            webView.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 4),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        loadMarkdownTemplate()
     }
 
     // MARK: - Template Loading
