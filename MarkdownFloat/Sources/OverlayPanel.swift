@@ -3,6 +3,7 @@ import AppKit
 class OverlayPanel: NSPanel {
     var overlayViewController: OverlayViewController?
     private var isAnimating = false
+    private let visibleAlpha: CGFloat = 0.95
 
     init() {
         let screen = NSScreen.main ?? NSScreen.screens[0]
@@ -14,7 +15,7 @@ class OverlayPanel: NSPanel {
 
         super.init(
             contentRect: frame,
-            styleMask: [.borderless],
+            styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -27,22 +28,30 @@ class OverlayPanel: NSPanel {
         self.hidesOnDeactivate = false
         self.isMovableByWindowBackground = true
         self.appearance = NSAppearance(named: .darkAqua)
+        self.minSize = NSSize(width: 600, height: 420)
 
-        let contentBounds = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
-        let visualEffect = NSVisualEffectView(frame: contentBounds)
-        visualEffect.material = .sidebar
-        visualEffect.state = .active
-        visualEffect.blendingMode = .behindWindow
-        visualEffect.wantsLayer = true
-        visualEffect.layer?.cornerRadius = 16
-        visualEffect.layer?.masksToBounds = true
-        visualEffect.autoresizingMask = [.width, .height]
-        self.contentView = visualEffect
+        let initialSize = NSSize(width: panelWidth, height: panelHeight)
+        self.setContentSize(initialSize)
+
+        let contentBounds = NSRect(origin: .zero, size: initialSize)
+        let visualEffectView = NSVisualEffectView(frame: contentBounds)
+        visualEffectView.material = .hudWindow
+        visualEffectView.state = .active
+        visualEffectView.blendingMode = .behindWindow
+        visualEffectView.wantsLayer = true
+        visualEffectView.layer?.cornerRadius = 22
+        visualEffectView.layer?.masksToBounds = true
+        visualEffectView.layer?.borderWidth = 1
+        visualEffectView.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.07).cgColor
+        visualEffectView.layer?.backgroundColor = NSColor(calibratedRed: 0.08, green: 0.09, blue: 0.11, alpha: 0.26).cgColor
+        visualEffectView.autoresizingMask = [.width, .height]
+        self.contentView = visualEffectView
 
         let viewController = OverlayViewController()
-        viewController.view.frame = contentBounds
-        viewController.view.autoresizingMask = [.width, .height]
-        visualEffect.addSubview(viewController.view)
+        let overlayView = viewController.view
+        overlayView.frame = contentBounds
+        overlayView.autoresizingMask = [.width, .height]
+        visualEffectView.addSubview(overlayView)
         self.overlayViewController = viewController
     }
 
@@ -73,7 +82,7 @@ class OverlayPanel: NSPanel {
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            self.animator().alphaValue = 1
+            self.animator().alphaValue = visibleAlpha
             self.animator().setFrame(finalFrame, display: true)
         }, completionHandler: { [weak self] in
             self?.isAnimating = false
