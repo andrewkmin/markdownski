@@ -42,12 +42,15 @@ private final class EditorTextView: NSTextView {
             case "v": paste(nil); return true
             case "c": copy(nil); return true
             case "x": cut(nil); return true
-            case "z": undoManager?.undo(); return true
+            case "z":
+                guard let um = undoManager, um.canUndo else { return super.performKeyEquivalent(with: event) }
+                um.undo(); return true
             default: break
             }
         }
         if flags == [.command, .shift], key == "z" {
-            undoManager?.redo(); return true
+            guard let um = undoManager, um.canRedo else { return super.performKeyEquivalent(with: event) }
+            um.redo(); return true
         }
         return super.performKeyEquivalent(with: event)
     }
@@ -55,6 +58,9 @@ private final class EditorTextView: NSTextView {
 
 final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationDelegate {
     static let minimumPanelWidth: CGFloat = 560
+
+    private static let accentGreen = NSColor(calibratedRed: 0.45, green: 0.82, blue: 0.68, alpha: 0.95)
+    private static let copyIconConfig = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .medium)
 
     private static let autoPasteDefaultsKey = "autoPasteFromClipboardEnabled"
     private static let splitModeDefaultsKey = "previewSplitMode"
@@ -91,6 +97,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     private var modeTextStorage: [ToolMode: String] = [:]
     private var currentToolMode: ToolMode = .markdown
+    private var copyFeedbackWorkItems: [ObjectIdentifier: DispatchWorkItem] = [:]
     private var renderTimer: Timer?
     private var isTemplateLoaded = false
     private var pendingRender = false
@@ -101,10 +108,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     private var selectedSplitMode: SplitMode {
         SplitMode(rawValue: splitModeControl.selectedSegment) ?? .horizontal
-    }
-
-    private var selectedToolMode: ToolMode {
-        ToolMode(rawValue: toolModeControl.selectedSegment) ?? .markdown
     }
 
     private var selectedJSONStringTransformMode: JSONStringTransformMode {
@@ -467,8 +470,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         button.bezelStyle = .regularSquare
         button.setButtonType(.momentaryPushIn)
         button.title = ""
-        let config = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .medium)
-        button.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")?.withSymbolConfiguration(config)
+        button.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")?.withSymbolConfiguration(Self.copyIconConfig)
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = NSColor(calibratedWhite: 1.0, alpha: 0.45)
         button.wantsLayer = true
@@ -555,7 +557,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         editor.autoresizingMask = [.width]
         editor.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         editor.minSize = NSSize(width: 0, height: 0)
-        editor.insertionPointColor = NSColor(calibratedRed: 0.45, green: 0.82, blue: 0.68, alpha: 0.95)
+        editor.insertionPointColor = Self.accentGreen
         return editor
     }
 
@@ -605,7 +607,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     // MARK: - Mode UI
 
     private func applyToolModeUI() {
-        switch selectedToolMode {
+        switch currentToolMode {
         case .markdown:
             titleLabel.stringValue = "Markdown"
             subtitleLabel.stringValue = "Live preview in a floating workspace"
@@ -642,7 +644,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     }
 
     private func applyJSONTransformControlVisibility() {
-        let shouldShowTransformControl = selectedToolMode == .jsonParseStringify
+        let shouldShowTransformControl = currentToolMode == .jsonParseStringify
         jsonTransformModeControl.isHidden = !shouldShowTransformControl
         inputTitleTrailingToTransformConstraint.isActive = shouldShowTransformControl
         inputTitleTrailingToCardConstraint.isActive = !shouldShowTransformControl
@@ -682,7 +684,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     }
 
     private func inputPlaceholderText() -> String {
-        switch selectedToolMode {
+        switch currentToolMode {
         case .markdown:
             return "Write markdown here..."
         case .jsonFormat:
@@ -698,7 +700,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     }
 
     private func outputPlaceholderText() -> String {
-        switch selectedToolMode {
+        switch currentToolMode {
         case .markdown:
             return ""
         case .jsonFormat:
@@ -773,6 +775,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         UserDefaults.standard.set(mode.rawValue, forKey: Self.toolModeDefaultsKey)
 
         textView.string = modeTextStorage[mode] ?? ""
+        textView.undoManager?.removeAllActions()
 
         applyToolModeUI()
         processInput()
@@ -785,7 +788,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private func jsonStringTransformModeChanged(_ sender: NSSegmentedControl) {
         let mode = JSONStringTransformMode(rawValue: sender.selectedSegment) ?? .parse
         UserDefaults.standard.set(mode.rawValue, forKey: Self.jsonTransformModeDefaultsKey)
-        if selectedToolMode == .jsonParseStringify {
+        if currentToolMode == .jsonParseStringify {
             updateJSONTransformTitles()
             placeholderLabel.stringValue = inputPlaceholderText()
             updatePlaceholderVisibility()
@@ -824,17 +827,21 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     }
 
     private func showCopyFeedback(on button: NSButton) {
-        let originalImage = button.image
-        let originalTint = button.contentTintColor
+        let buttonId = ObjectIdentifier(button)
+        copyFeedbackWorkItems[buttonId]?.cancel()
 
-        let checkConfig = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .medium)
-        button.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Copied")?.withSymbolConfiguration(checkConfig)
-        button.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.82, blue: 0.68, alpha: 0.95)
+        let docImage = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")?.withSymbolConfiguration(Self.copyIconConfig)
+        let defaultTint = NSColor(calibratedWhite: 1.0, alpha: 0.45)
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak button] in
-            button?.image = originalImage
-            button?.contentTintColor = originalTint
+        button.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Copied")?.withSymbolConfiguration(Self.copyIconConfig)
+        button.contentTintColor = Self.accentGreen
+
+        let workItem = DispatchWorkItem { [weak button] in
+            button?.image = docImage
+            button?.contentTintColor = defaultTint
         }
+        copyFeedbackWorkItems[buttonId] = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
     }
 
     // MARK: - WKNavigationDelegate
@@ -850,7 +857,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     // MARK: - Processing
 
     private func processInput() {
-        switch selectedToolMode {
+        switch currentToolMode {
         case .markdown:
             renderMarkdown()
         case .jsonFormat:
@@ -990,6 +997,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
         if let clipboardString = NSPasteboard.general.string(forType: .string), !clipboardString.isEmpty {
             textView.string = clipboardString
+            modeTextStorage[currentToolMode] = clipboardString
             updatePlaceholderVisibility()
             processInput()
         }
