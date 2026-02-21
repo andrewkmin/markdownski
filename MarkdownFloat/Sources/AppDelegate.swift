@@ -8,6 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyManager = HotkeyManager { [weak self] in
             self?.panel.toggle()
         }
+        panel.overlayViewController?.hotkeyManager = hotkeyManager
         // Panel stays hidden until hotkey — don't show on launch
     }
 }

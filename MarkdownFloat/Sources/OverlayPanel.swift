@@ -95,6 +95,7 @@ class OverlayPanel: NSPanel {
 
     func hide() {
         guard !isAnimating else { return }
+        overlayViewController?.cancelHotkeyRecordingIfActive()
         isAnimating = true
 
         NSAnimationContext.runAnimationGroup({ context in
