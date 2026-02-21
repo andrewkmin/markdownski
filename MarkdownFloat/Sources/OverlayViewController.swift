@@ -36,9 +36,18 @@ private final class EditorTextView: NSTextView {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let key = event.charactersIgnoringModifiers?.lowercased()
-        if flags == [.command], key == "a" {
-            selectAll(nil)
-            return true
+        if flags == [.command] {
+            switch key {
+            case "a": selectAll(nil); return true
+            case "v": paste(nil); return true
+            case "c": copy(nil); return true
+            case "x": cut(nil); return true
+            case "z": undoManager?.undo(); return true
+            default: break
+            }
+        }
+        if flags == [.command, .shift], key == "z" {
+            undoManager?.redo(); return true
         }
         return super.performKeyEquivalent(with: event)
     }
