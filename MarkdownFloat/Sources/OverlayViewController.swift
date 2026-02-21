@@ -94,6 +94,14 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private var isTemplateLoaded = false
     private var pendingRender = false
 
+    weak var hotkeyManager: HotkeyManager? {
+        didSet { updateShortcutLabel() }
+    }
+    private var shortcutLabel: NSTextField?
+    private var isRecordingHotkey = false
+    private var hotkeyEventMonitor: Any?
+    private var chipRejectionWorkItem: DispatchWorkItem?
+
     private var isAutoPasteEnabled: Bool {
         UserDefaults.standard.bool(forKey: Self.autoPasteDefaultsKey)
     }
@@ -142,7 +150,29 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         subtitleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
         subtitleLabel.textColor = NSColor(calibratedWhite: 0.80, alpha: 0.84)
 
-        shortcutChip = makeChip(text: "⌘⇧M")
+        let initialShortcut: String = {
+            let defaults = UserDefaults.standard
+            if defaults.object(forKey: "hotkeyKeyCode") != nil {
+                let code = UInt32(defaults.integer(forKey: "hotkeyKeyCode"))
+                let mods = UInt32(defaults.integer(forKey: "hotkeyModifiers"))
+                return HotkeyManager.displayString(keyCode: code, carbonModifiers: mods)
+            }
+            return "⌘⇧M"
+        }()
+        shortcutChip = makeChip(text: initialShortcut)
+        shortcutLabel = shortcutChip.subviews.compactMap { $0 as? NSTextField }.first
+        shortcutChip.toolTip = "Click to change"
+
+        let clickGesture = NSClickGestureRecognizer(target: self, action: #selector(shortcutChipClicked(_:)))
+        shortcutChip.addGestureRecognizer(clickGesture)
+
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        shortcutChip.addTrackingArea(trackingArea)
 
         toolModeControl = makeToolModeControl()
         let savedToolModeRaw = UserDefaults.standard.integer(forKey: Self.toolModeDefaultsKey)
@@ -738,6 +768,100 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         }
     }
 
+    override func mouseEntered(with event: NSEvent) {
+        guard !isRecordingHotkey else { return }
+        NSCursor.pointingHand.push()
+        shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.22).cgColor
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSCursor.pop()
+        if !isRecordingHotkey {
+            shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
+        }
+    }
+
+    @objc
+    private func shortcutChipClicked(_ sender: NSClickGestureRecognizer) {
+        guard !isRecordingHotkey else { return }
+        NSCursor.pop()
+        startRecordingHotkey()
+    }
+
+    private func startRecordingHotkey() {
+        isRecordingHotkey = true
+        shortcutLabel?.stringValue = "Type shortcut…"
+        shortcutChip.layer?.borderColor = Self.accentGreen.cgColor
+        shortcutChip.layer?.borderWidth = 1.5
+
+        hotkeyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.handleRecordedKey(event)
+            return nil // swallow the event
+        }
+    }
+
+    private func stopRecordingHotkey() {
+        isRecordingHotkey = false
+        shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
+        shortcutChip.layer?.borderWidth = 1
+
+        if let monitor = hotkeyEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            hotkeyEventMonitor = nil
+        }
+    }
+
+    private func handleRecordedKey(_ event: NSEvent) {
+        // Escape cancels
+        if event.keyCode == 0x35 {
+            stopRecordingHotkey()
+            updateShortcutLabel()
+            return
+        }
+
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let hasCmd = flags.contains(.command)
+        let hasCtrl = flags.contains(.control)
+
+        // Require at least Cmd or Ctrl
+        guard hasCmd || hasCtrl else {
+            showChipRejection("Requires ⌘ or ⌃")
+            return
+        }
+
+        let carbonMods = HotkeyManager.carbonModifiers(from: flags)
+        let code = UInt32(event.keyCode)
+
+        // Block system-reserved shortcuts (Cmd-only + Q/W/H/Tab)
+        if flags == [.command] {
+            let reserved: Set<UInt32> = [0x0C, 0x0D, 0x04, 0x30] // Q, W, H, Tab
+            if reserved.contains(code) {
+                showChipRejection("Reserved by system")
+                return
+            }
+        }
+
+        hotkeyManager?.reregister(keyCode: code, modifiers: carbonMods)
+        stopRecordingHotkey()
+        updateShortcutLabel()
+    }
+
+    private func showChipRejection(_ message: String) {
+        chipRejectionWorkItem?.cancel()
+        shortcutLabel?.stringValue = message
+        let workItem = DispatchWorkItem { [weak self] in
+            guard self?.isRecordingHotkey == true else { return }
+            self?.shortcutLabel?.stringValue = "Type shortcut…"
+        }
+        chipRejectionWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: workItem)
+    }
+
+    private func updateShortcutLabel() {
+        guard let manager = hotkeyManager else { return }
+        shortcutLabel?.stringValue = manager.displayString
+    }
+
     @objc
     private func closeButtonPressed(_ sender: NSButton) {
         if let panel = view.window as? OverlayPanel {
@@ -932,6 +1056,12 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     // MARK: - Public Methods
 
+    func cancelHotkeyRecordingIfActive() {
+        guard isRecordingHotkey else { return }
+        stopRecordingHotkey()
+        updateShortcutLabel()
+    }
+
     func focusInput() {
         view.window?.makeFirstResponder(textView)
     }
@@ -950,5 +1080,8 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     deinit {
         renderTimer?.invalidate()
+        if let monitor = hotkeyEventMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 }
