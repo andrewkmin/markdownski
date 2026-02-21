@@ -9,12 +9,8 @@ private enum SplitMode: Int {
 private enum ToolMode: Int {
     case markdown = 0
     case jsonFormat = 1
-    case jsonParseStringify = 2
-}
-
-private enum JSONStringTransformMode: Int {
-    case parse = 0
-    case stringify = 1
+    case jsonParse = 2
+    case jsonStringify = 3
 }
 
 private enum JSONToolError: LocalizedError {
@@ -65,7 +61,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private static let autoPasteDefaultsKey = "autoPasteFromClipboardEnabled"
     private static let splitModeDefaultsKey = "previewSplitMode"
     private static let toolModeDefaultsKey = "selectedToolMode"
-    private static let jsonTransformModeDefaultsKey = "jsonStringTransformMode"
 
     private var titleLabel: NSTextField!
     private var subtitleLabel: NSTextField!
@@ -78,7 +73,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     private var inputCard: NSVisualEffectView!
     private var inputCardTitle: NSTextField!
-    private var jsonTransformModeControl: NSSegmentedControl!
     private var scrollView: NSScrollView!
     private var textView: NSTextView!
     private var placeholderLabel: NSTextField!
@@ -92,8 +86,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private var copyOutputButton: NSButton!
 
     private var splitLayoutConstraints: [NSLayoutConstraint] = []
-    private var inputTitleTrailingToTransformConstraint: NSLayoutConstraint!
-    private var inputTitleTrailingToCardConstraint: NSLayoutConstraint!
 
     private var modeTextStorage: [ToolMode: String] = [:]
     private var currentToolMode: ToolMode = .markdown
@@ -110,10 +102,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         SplitMode(rawValue: splitModeControl.selectedSegment) ?? .horizontal
     }
 
-    private var selectedJSONStringTransformMode: JSONStringTransformMode {
-        JSONStringTransformMode(rawValue: jsonTransformModeControl.selectedSegment) ?? .parse
-    }
-
     override func loadView() {
         let container = NSView()
         container.wantsLayer = true
@@ -128,7 +116,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             Self.autoPasteDefaultsKey: false,
             Self.splitModeDefaultsKey: SplitMode.horizontal.rawValue,
             Self.toolModeDefaultsKey: ToolMode.markdown.rawValue,
-            Self.jsonTransformModeDefaultsKey: JSONStringTransformMode.parse.rawValue,
         ])
 
         setupHeader()
@@ -193,9 +180,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private func setupInputCard() {
         inputCard = makeCard()
         inputCardTitle = makeCardTitle(text: "Editor")
-        jsonTransformModeControl = makeJSONStringTransformModeControl()
-        let savedTransformRaw = UserDefaults.standard.integer(forKey: Self.jsonTransformModeDefaultsKey)
-        jsonTransformModeControl.selectedSegment = JSONStringTransformMode(rawValue: savedTransformRaw)?.rawValue ?? JSONStringTransformMode.parse.rawValue
 
         scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -215,22 +199,15 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         copyInputButton = makeCopyButton(action: #selector(copyInputPressed(_:)))
 
         inputCard.addSubview(inputCardTitle)
-        inputCard.addSubview(jsonTransformModeControl)
         inputCard.addSubview(copyInputButton)
         inputCard.addSubview(scrollView)
         inputCard.addSubview(placeholderLabel)
         view.addSubview(inputCard)
 
-        inputTitleTrailingToTransformConstraint = inputCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: jsonTransformModeControl.leadingAnchor, constant: -8)
-        inputTitleTrailingToCardConstraint = inputCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: copyInputButton.leadingAnchor, constant: -8)
-
         NSLayoutConstraint.activate([
             inputCardTitle.topAnchor.constraint(equalTo: inputCard.topAnchor, constant: 12),
             inputCardTitle.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 14),
-            inputTitleTrailingToTransformConstraint,
-
-            jsonTransformModeControl.centerYAnchor.constraint(equalTo: inputCardTitle.centerYAnchor),
-            jsonTransformModeControl.trailingAnchor.constraint(equalTo: copyInputButton.leadingAnchor, constant: -8),
+            inputCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: copyInputButton.leadingAnchor, constant: -8),
 
             copyInputButton.centerYAnchor.constraint(equalTo: inputCardTitle.centerYAnchor),
             copyInputButton.trailingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: -12),
@@ -485,13 +462,14 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     }
 
     private func makeToolModeControl() -> NSSegmentedControl {
-        let control = NSSegmentedControl(labels: ["Markdown", "Format JSON", "Parse/Stringify"], trackingMode: .selectOne, target: self, action: #selector(toolModeChanged(_:)))
+        let control = NSSegmentedControl(labels: ["Markdown", "Format JSON", "Parse JSON", "Stringify JSON"], trackingMode: .selectOne, target: self, action: #selector(toolModeChanged(_:)))
         control.translatesAutoresizingMaskIntoConstraints = false
         control.controlSize = .small
         control.segmentStyle = .rounded
-        control.setWidth(104, forSegment: 0)
-        control.setWidth(108, forSegment: 1)
-        control.setWidth(130, forSegment: 2)
+        control.setWidth(96, forSegment: 0)
+        control.setWidth(100, forSegment: 1)
+        control.setWidth(96, forSegment: 2)
+        control.setWidth(108, forSegment: 3)
         return control
     }
 
@@ -512,16 +490,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         control.setWidth(32, forSegment: 1)
         control.setToolTip("Horizontal split", forSegment: 0)
         control.setToolTip("Vertical split", forSegment: 1)
-        return control
-    }
-
-    private func makeJSONStringTransformModeControl() -> NSSegmentedControl {
-        let control = NSSegmentedControl(labels: ["Parse", "Stringify"], trackingMode: .selectOne, target: self, action: #selector(jsonStringTransformModeChanged(_:)))
-        control.translatesAutoresizingMaskIntoConstraints = false
-        control.controlSize = .small
-        control.segmentStyle = .rounded
-        control.setWidth(66, forSegment: 0)
-        control.setWidth(78, forSegment: 1)
         return control
     }
 
@@ -628,37 +596,29 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             copyOutputButton.isHidden = false
             applyInputTypography(monospaced: true)
 
-        case .jsonParseStringify:
-            titleLabel.stringValue = "JSON Parse/Stringify"
-            subtitleLabel.stringValue = "Convert JSON strings and JSON objects"
+        case .jsonParse:
+            titleLabel.stringValue = "Parse JSON"
+            subtitleLabel.stringValue = "Unwrap a JSON string literal into formatted JSON"
+            inputCardTitle.stringValue = "JSON STRING"
+            previewCardTitle.stringValue = "PARSED JSON"
             webView.isHidden = true
             outputScrollView.isHidden = false
             copyOutputButton.isHidden = false
             applyInputTypography(monospaced: true)
-            updateJSONTransformTitles()
-        }
 
-        applyJSONTransformControlVisibility()
-        placeholderLabel.stringValue = inputPlaceholderText()
-        updatePlaceholderVisibility()
-    }
-
-    private func applyJSONTransformControlVisibility() {
-        let shouldShowTransformControl = currentToolMode == .jsonParseStringify
-        jsonTransformModeControl.isHidden = !shouldShowTransformControl
-        inputTitleTrailingToTransformConstraint.isActive = shouldShowTransformControl
-        inputTitleTrailingToCardConstraint.isActive = !shouldShowTransformControl
-    }
-
-    private func updateJSONTransformTitles() {
-        switch selectedJSONStringTransformMode {
-        case .parse:
-            inputCardTitle.stringValue = "JSON STRING"
-            previewCardTitle.stringValue = "PARSED JSON"
-        case .stringify:
+        case .jsonStringify:
+            titleLabel.stringValue = "Stringify JSON"
+            subtitleLabel.stringValue = "Wrap a JSON value into an escaped string literal"
             inputCardTitle.stringValue = "JSON OBJECT"
             previewCardTitle.stringValue = "JSON STRING"
+            webView.isHidden = true
+            outputScrollView.isHidden = false
+            copyOutputButton.isHidden = false
+            applyInputTypography(monospaced: true)
         }
+
+        placeholderLabel.stringValue = inputPlaceholderText()
+        updatePlaceholderVisibility()
     }
 
     private func applyInputTypography(monospaced: Bool) {
@@ -689,13 +649,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             return "Write markdown here..."
         case .jsonFormat:
             return "Paste raw JSON here..."
-        case .jsonParseStringify:
-            switch selectedJSONStringTransformMode {
-            case .parse:
-                return "Paste a JSON string literal, e.g. \"{\\\"name\\\":\\\"Ada\\\"}\""
-            case .stringify:
-                return "Paste a JSON object/value to stringify..."
-            }
+        case .jsonParse:
+            return "Paste a JSON string literal, e.g. \"{\\\"name\\\":\\\"Ada\\\"}\""
+        case .jsonStringify:
+            return "Paste a JSON object/value to stringify..."
         }
     }
 
@@ -705,13 +662,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             return ""
         case .jsonFormat:
             return "Formatted JSON appears here."
-        case .jsonParseStringify:
-            switch selectedJSONStringTransformMode {
-            case .parse:
-                return "Parsed JSON appears here."
-            case .stringify:
-                return "Stringified JSON appears here."
-            }
+        case .jsonParse:
+            return "Parsed JSON appears here."
+        case .jsonStringify:
+            return "Stringified JSON appears here."
         }
     }
 
@@ -785,21 +739,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     }
 
     @objc
-    private func jsonStringTransformModeChanged(_ sender: NSSegmentedControl) {
-        let mode = JSONStringTransformMode(rawValue: sender.selectedSegment) ?? .parse
-        UserDefaults.standard.set(mode.rawValue, forKey: Self.jsonTransformModeDefaultsKey)
-        if currentToolMode == .jsonParseStringify {
-            updateJSONTransformTitles()
-            placeholderLabel.stringValue = inputPlaceholderText()
-            updatePlaceholderVisibility()
-            processInput()
-            DispatchQueue.main.async { [weak self] in
-                self?.focusInput()
-            }
-        }
-    }
-
-    @objc
     private func closeButtonPressed(_ sender: NSButton) {
         if let panel = view.window as? OverlayPanel {
             panel.hide()
@@ -862,8 +801,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             renderMarkdown()
         case .jsonFormat:
             renderJSONFormat()
-        case .jsonParseStringify:
-            renderJSONStringTransform()
+        case .jsonParse:
+            renderJSONParse()
+        case .jsonStringify:
+            renderJSONStringify()
         }
     }
 
@@ -894,39 +835,43 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         }
     }
 
-    private func renderJSONStringTransform() {
+    private func renderJSONParse() {
         let raw = textView.string
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             setOutputText(outputPlaceholderText(), kind: .placeholder)
             return
         }
 
-        switch selectedJSONStringTransformMode {
-        case .parse:
+        do {
+            let innerJSONString = try decodeJSONStringLiteral(from: raw)
+            let value: Any
             do {
-                let innerJSONString = try decodeJSONStringLiteral(from: raw)
-                let value: Any
-                do {
-                    value = try parseJSONValue(from: innerJSONString)
-                } catch {
-                    throw JSONToolError.embeddedJSONInvalid(error.localizedDescription)
-                }
-                let formatted = try encodeJSON(value: value, pretty: true)
-                setOutputText(formatted, kind: .normal)
+                value = try parseJSONValue(from: innerJSONString)
             } catch {
-                setOutputText("\(error.localizedDescription)", kind: .error)
+                throw JSONToolError.embeddedJSONInvalid(error.localizedDescription)
             }
+            let formatted = try encodeJSON(value: value, pretty: true)
+            setOutputText(formatted, kind: .normal)
+        } catch {
+            setOutputText("\(error.localizedDescription)", kind: .error)
+        }
+    }
 
-        case .stringify:
-            do {
-                let value = try parseJSONValue(from: raw)
-                let canonicalJSON = try encodeJSON(value: value, pretty: false)
-                let encoded = try JSONEncoder().encode(canonicalJSON)
-                let stringified = String(decoding: encoded, as: UTF8.self)
-                setOutputText(stringified, kind: .normal)
-            } catch {
-                setOutputText("Invalid JSON value.\n\(error.localizedDescription)", kind: .error)
-            }
+    private func renderJSONStringify() {
+        let raw = textView.string
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            setOutputText(outputPlaceholderText(), kind: .placeholder)
+            return
+        }
+
+        do {
+            let value = try parseJSONValue(from: raw)
+            let canonicalJSON = try encodeJSON(value: value, pretty: false)
+            let encoded = try JSONEncoder().encode(canonicalJSON)
+            let stringified = String(decoding: encoded, as: UTF8.self)
+            setOutputText(stringified, kind: .normal)
+        } catch {
+            setOutputText("Invalid JSON value.\n\(error.localizedDescription)", kind: .error)
         }
     }
 
