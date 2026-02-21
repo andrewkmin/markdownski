@@ -6,6 +6,32 @@ private enum SplitMode: Int {
     case vertical = 1
 }
 
+private enum ToolMode: Int {
+    case markdown = 0
+    case jsonFormat = 1
+    case jsonParseStringify = 2
+}
+
+private enum JSONStringTransformMode: Int {
+    case parse = 0
+    case stringify = 1
+}
+
+private enum JSONToolError: LocalizedError {
+    case expectedJSONStringLiteral(String)
+    case embeddedJSONInvalid(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .expectedJSONStringLiteral(let reason):
+            let summary = "Input must be a JSON string literal, for example: \"{\\\"name\\\":\\\"Ada\\\"}\""
+            return reason.isEmpty ? summary : "\(summary)\n\(reason)"
+        case .embeddedJSONInvalid(let reason):
+            return "String value does not contain valid JSON.\n\(reason)"
+        }
+    }
+}
+
 private final class EditorTextView: NSTextView {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -18,14 +44,18 @@ private final class EditorTextView: NSTextView {
     }
 }
 
-class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationDelegate {
+final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationDelegate {
     static let minimumPanelWidth: CGFloat = 560
+
     private static let autoPasteDefaultsKey = "autoPasteFromClipboardEnabled"
     private static let splitModeDefaultsKey = "previewSplitMode"
+    private static let toolModeDefaultsKey = "selectedToolMode"
+    private static let jsonTransformModeDefaultsKey = "jsonStringTransformMode"
 
     private var titleLabel: NSTextField!
     private var subtitleLabel: NSTextField!
     private var shortcutChip: NSVisualEffectView!
+    private var toolModeControl: NSSegmentedControl!
     private var autoPasteLabel: NSTextField!
     private var autoPasteToggle: NSSwitch!
     private var splitModeControl: NSSegmentedControl!
@@ -33,6 +63,7 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
 
     private var inputCard: NSVisualEffectView!
     private var inputCardTitle: NSTextField!
+    private var jsonTransformModeControl: NSSegmentedControl!
     private var scrollView: NSScrollView!
     private var textView: NSTextView!
     private var placeholderLabel: NSTextField!
@@ -40,8 +71,12 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
     private var previewCard: NSVisualEffectView!
     private var previewCardTitle: NSTextField!
     private var webView: WKWebView!
+    private var outputScrollView: NSScrollView!
+    private var outputTextView: NSTextView!
 
     private var splitLayoutConstraints: [NSLayoutConstraint] = []
+    private var inputTitleTrailingToTransformConstraint: NSLayoutConstraint!
+    private var inputTitleTrailingToCardConstraint: NSLayoutConstraint!
 
     private var renderTimer: Timer?
     private var isTemplateLoaded = false
@@ -53,6 +88,14 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
 
     private var selectedSplitMode: SplitMode {
         SplitMode(rawValue: splitModeControl.selectedSegment) ?? .horizontal
+    }
+
+    private var selectedToolMode: ToolMode {
+        ToolMode(rawValue: toolModeControl.selectedSegment) ?? .markdown
+    }
+
+    private var selectedJSONStringTransformMode: JSONStringTransformMode {
+        JSONStringTransformMode(rawValue: jsonTransformModeControl.selectedSegment) ?? .parse
     }
 
     override func loadView() {
@@ -68,6 +111,8 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         UserDefaults.standard.register(defaults: [
             Self.autoPasteDefaultsKey: false,
             Self.splitModeDefaultsKey: SplitMode.horizontal.rawValue,
+            Self.toolModeDefaultsKey: ToolMode.markdown.rawValue,
+            Self.jsonTransformModeDefaultsKey: JSONStringTransformMode.parse.rawValue,
         ])
 
         setupHeader()
@@ -75,7 +120,9 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         setupPreviewCard()
         setupConstraints()
         loadMarkdownTemplate()
+        applyToolModeUI()
         updatePlaceholderVisibility()
+        processInput()
     }
 
     // MARK: - Setup
@@ -93,6 +140,10 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
 
         shortcutChip = makeChip(text: "⌘⇧M")
 
+        toolModeControl = makeToolModeControl()
+        let savedToolModeRaw = UserDefaults.standard.integer(forKey: Self.toolModeDefaultsKey)
+        toolModeControl.selectedSegment = ToolMode(rawValue: savedToolModeRaw)?.rawValue ?? ToolMode.markdown.rawValue
+
         autoPasteLabel = NSTextField(labelWithString: "Paste from clipboard")
         autoPasteLabel.translatesAutoresizingMaskIntoConstraints = false
         autoPasteLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
@@ -107,13 +158,15 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         autoPasteToggle.action = #selector(autoPasteToggleChanged(_:))
 
         splitModeControl = makeSplitModeControl()
-        splitModeControl.selectedSegment = SplitMode(rawValue: UserDefaults.standard.integer(forKey: Self.splitModeDefaultsKey))?.rawValue ?? SplitMode.horizontal.rawValue
+        let savedSplitModeRaw = UserDefaults.standard.integer(forKey: Self.splitModeDefaultsKey)
+        splitModeControl.selectedSegment = SplitMode(rawValue: savedSplitModeRaw)?.rawValue ?? SplitMode.horizontal.rawValue
 
         closeButton = makeCloseButton()
 
         view.addSubview(titleLabel)
         view.addSubview(subtitleLabel)
         view.addSubview(shortcutChip)
+        view.addSubview(toolModeControl)
         view.addSubview(autoPasteLabel)
         view.addSubview(autoPasteToggle)
         view.addSubview(splitModeControl)
@@ -123,6 +176,9 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
     private func setupInputCard() {
         inputCard = makeCard()
         inputCardTitle = makeCardTitle(text: "Editor")
+        jsonTransformModeControl = makeJSONStringTransformModeControl()
+        let savedTransformRaw = UserDefaults.standard.integer(forKey: Self.jsonTransformModeDefaultsKey)
+        jsonTransformModeControl.selectedSegment = JSONStringTransformMode(rawValue: savedTransformRaw)?.rawValue ?? JSONStringTransformMode.parse.rawValue
 
         scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
@@ -130,59 +186,31 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         scrollView.scrollerStyle = .overlay
         scrollView.drawsBackground = false
 
-        let textContainer = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
-        textContainer.widthTracksTextView = true
-        textContainer.heightTracksTextView = false
-
-        let layoutManager = NSLayoutManager()
-        layoutManager.addTextContainer(textContainer)
-
-        let textStorage = NSTextStorage()
-        textStorage.addLayoutManager(layoutManager)
-
-        let editorFont = NSFont.systemFont(ofSize: 15, weight: .regular)
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 6
-
-        textView = EditorTextView(frame: .zero, textContainer: textContainer)
-        textView.isRichText = false
-        textView.font = editorFont
-        textView.textColor = NSColor(calibratedWhite: 0.92, alpha: 0.96)
-        textView.insertionPointColor = NSColor(calibratedRed: 0.45, green: 0.82, blue: 0.68, alpha: 0.95)
-        textView.backgroundColor = .clear
-        textView.drawsBackground = false
-        textView.textContainerInset = NSSize(width: 0, height: 10)
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
+        textView = makeEditableTextView()
         textView.delegate = self
-        textView.isHorizontallyResizable = false
-        textView.isVerticallyResizable = true
-        textView.autoresizingMask = [.width]
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.minSize = NSSize(width: 0, height: 0)
-        textView.defaultParagraphStyle = paragraphStyle
-        textView.typingAttributes = [
-            .font: editorFont,
-            .foregroundColor: NSColor(calibratedWhite: 0.92, alpha: 0.96),
-            .paragraphStyle: paragraphStyle,
-        ]
+        scrollView.documentView = textView
 
         placeholderLabel = NSTextField(labelWithString: "Write markdown here...")
         placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
         placeholderLabel.font = NSFont.systemFont(ofSize: 14, weight: .regular)
         placeholderLabel.textColor = NSColor(calibratedWhite: 0.70, alpha: 0.55)
 
-        scrollView.documentView = textView
-
         inputCard.addSubview(inputCardTitle)
+        inputCard.addSubview(jsonTransformModeControl)
         inputCard.addSubview(scrollView)
         inputCard.addSubview(placeholderLabel)
         view.addSubview(inputCard)
 
+        inputTitleTrailingToTransformConstraint = inputCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: jsonTransformModeControl.leadingAnchor, constant: -8)
+        inputTitleTrailingToCardConstraint = inputCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: inputCard.trailingAnchor, constant: -14)
+
         NSLayoutConstraint.activate([
             inputCardTitle.topAnchor.constraint(equalTo: inputCard.topAnchor, constant: 12),
             inputCardTitle.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 14),
+            inputTitleTrailingToTransformConstraint,
+
+            jsonTransformModeControl.centerYAnchor.constraint(equalTo: inputCardTitle.centerYAnchor),
+            jsonTransformModeControl.trailingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: -12),
 
             scrollView.topAnchor.constraint(equalTo: inputCardTitle.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 14),
@@ -208,8 +236,18 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         configureWebViewAppearance()
         webView.navigationDelegate = self
 
+        outputScrollView = NSScrollView()
+        outputScrollView.translatesAutoresizingMaskIntoConstraints = false
+        outputScrollView.hasVerticalScroller = true
+        outputScrollView.scrollerStyle = .overlay
+        outputScrollView.drawsBackground = false
+
+        outputTextView = makeReadonlyTextView()
+        outputScrollView.documentView = outputTextView
+
         previewCard.addSubview(previewCardTitle)
         previewCard.addSubview(webView)
+        previewCard.addSubview(outputScrollView)
         view.addSubview(previewCard)
 
         NSLayoutConstraint.activate([
@@ -220,24 +258,16 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
             webView.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: 8),
             webView.trailingAnchor.constraint(equalTo: previewCard.trailingAnchor, constant: -8),
             webView.bottomAnchor.constraint(equalTo: previewCard.bottomAnchor, constant: -8),
+
+            outputScrollView.topAnchor.constraint(equalTo: previewCardTitle.bottomAnchor, constant: 10),
+            outputScrollView.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: 14),
+            outputScrollView.trailingAnchor.constraint(equalTo: previewCard.trailingAnchor, constant: -14),
+            outputScrollView.bottomAnchor.constraint(equalTo: previewCard.bottomAnchor, constant: -14),
         ])
 
         DispatchQueue.main.async { [weak self] in
             self?.configureWebViewAppearance()
         }
-    }
-
-    private func configureWebViewAppearance() {
-        if #available(macOS 13.0, *) {
-            webView.underPageBackgroundColor = .clear
-        }
-
-        // WKWebView still paints white by default on macOS unless this flag is disabled.
-        webView.setValue(false, forKey: "drawsBackground")
-        webView.wantsLayer = true
-        webView.layer?.backgroundColor = NSColor.clear.cgColor
-        webView.enclosingScrollView?.drawsBackground = false
-        webView.enclosingScrollView?.backgroundColor = .clear
     }
 
     private func setupConstraints() {
@@ -270,6 +300,10 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
             splitModeControl.centerYAnchor.constraint(equalTo: subtitleLabel.centerYAnchor),
             splitModeControl.trailingAnchor.constraint(equalTo: autoPasteLabel.leadingAnchor, constant: -12),
             splitModeControl.leadingAnchor.constraint(greaterThanOrEqualTo: subtitleLabel.trailingAnchor, constant: 16),
+
+            toolModeControl.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 12),
+            toolModeControl.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            toolModeControl.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -outerPadding),
         ])
 
         applySplitLayout(mode: selectedSplitMode)
@@ -285,7 +319,7 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         switch mode {
         case .horizontal:
             splitLayoutConstraints = [
-                inputCard.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 16),
+                inputCard.topAnchor.constraint(equalTo: toolModeControl.bottomAnchor, constant: 14),
                 inputCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: outerPadding),
                 inputCard.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -outerPadding),
 
@@ -302,7 +336,7 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
             let inputPreferredHeight = inputCard.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.36)
             inputPreferredHeight.priority = .defaultHigh
             splitLayoutConstraints = [
-                inputCard.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 16),
+                inputCard.topAnchor.constraint(equalTo: toolModeControl.bottomAnchor, constant: 14),
                 inputCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: outerPadding),
                 inputCard.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -outerPadding),
 
@@ -395,6 +429,17 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         return button
     }
 
+    private func makeToolModeControl() -> NSSegmentedControl {
+        let control = NSSegmentedControl(labels: ["Markdown", "Format JSON", "Parse/Stringify"], trackingMode: .selectOne, target: self, action: #selector(toolModeChanged(_:)))
+        control.translatesAutoresizingMaskIntoConstraints = false
+        control.controlSize = .small
+        control.segmentStyle = .rounded
+        control.setWidth(104, forSegment: 0)
+        control.setWidth(108, forSegment: 1)
+        control.setWidth(130, forSegment: 2)
+        return control
+    }
+
     private func makeSplitModeControl() -> NSSegmentedControl {
         let control: NSSegmentedControl
         if let horizontalImage = makeSplitIcon(systemName: "rectangle.split.2x1"),
@@ -415,12 +460,201 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         return control
     }
 
+    private func makeJSONStringTransformModeControl() -> NSSegmentedControl {
+        let control = NSSegmentedControl(labels: ["Parse", "Stringify"], trackingMode: .selectOne, target: self, action: #selector(jsonStringTransformModeChanged(_:)))
+        control.translatesAutoresizingMaskIntoConstraints = false
+        control.controlSize = .small
+        control.segmentStyle = .rounded
+        control.setWidth(66, forSegment: 0)
+        control.setWidth(78, forSegment: 1)
+        return control
+    }
+
     private func makeSplitIcon(systemName: String) -> NSImage? {
         guard let image = NSImage(systemSymbolName: systemName, accessibilityDescription: nil) else {
             return nil
         }
         let config = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
         return image.withSymbolConfiguration(config)
+    }
+
+    private func makeEditableTextView() -> NSTextView {
+        let textContainer = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        textContainer.widthTracksTextView = true
+        textContainer.heightTracksTextView = false
+
+        let layoutManager = NSLayoutManager()
+        layoutManager.addTextContainer(textContainer)
+
+        let textStorage = NSTextStorage()
+        textStorage.addLayoutManager(layoutManager)
+
+        let editor = EditorTextView(frame: .zero, textContainer: textContainer)
+        editor.isRichText = false
+        editor.backgroundColor = .clear
+        editor.drawsBackground = false
+        editor.textContainerInset = NSSize(width: 0, height: 10)
+        editor.isAutomaticQuoteSubstitutionEnabled = false
+        editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticTextReplacementEnabled = false
+        editor.isHorizontallyResizable = false
+        editor.isVerticallyResizable = true
+        editor.autoresizingMask = [.width]
+        editor.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        editor.minSize = NSSize(width: 0, height: 0)
+        editor.insertionPointColor = NSColor(calibratedRed: 0.45, green: 0.82, blue: 0.68, alpha: 0.95)
+        return editor
+    }
+
+    private func makeReadonlyTextView() -> NSTextView {
+        let textContainer = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        textContainer.widthTracksTextView = true
+        textContainer.heightTracksTextView = false
+
+        let layoutManager = NSLayoutManager()
+        layoutManager.addTextContainer(textContainer)
+
+        let textStorage = NSTextStorage()
+        textStorage.addLayoutManager(layoutManager)
+
+        let output = EditorTextView(frame: .zero, textContainer: textContainer)
+        output.isEditable = false
+        output.isSelectable = true
+        output.backgroundColor = .clear
+        output.drawsBackground = false
+        output.textContainerInset = NSSize(width: 0, height: 10)
+        output.isAutomaticQuoteSubstitutionEnabled = false
+        output.isAutomaticDashSubstitutionEnabled = false
+        output.isAutomaticTextReplacementEnabled = false
+        output.isHorizontallyResizable = false
+        output.isVerticallyResizable = true
+        output.autoresizingMask = [.width]
+        output.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        output.minSize = NSSize(width: 0, height: 0)
+        output.textColor = NSColor(calibratedWhite: 0.90, alpha: 0.95)
+        output.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        return output
+    }
+
+    private func configureWebViewAppearance() {
+        if #available(macOS 13.0, *) {
+            webView.underPageBackgroundColor = .clear
+        }
+
+        // WKWebView still paints white by default on macOS unless this flag is disabled.
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.wantsLayer = true
+        webView.layer?.backgroundColor = NSColor.clear.cgColor
+        webView.enclosingScrollView?.drawsBackground = false
+        webView.enclosingScrollView?.backgroundColor = .clear
+    }
+
+    // MARK: - Mode UI
+
+    private func applyToolModeUI() {
+        switch selectedToolMode {
+        case .markdown:
+            titleLabel.stringValue = "Markdown"
+            subtitleLabel.stringValue = "Live preview in a floating workspace"
+            inputCardTitle.stringValue = "EDITOR"
+            previewCardTitle.stringValue = "PREVIEW"
+            webView.isHidden = false
+            outputScrollView.isHidden = true
+            applyInputTypography(monospaced: false)
+
+        case .jsonFormat:
+            titleLabel.stringValue = "JSON Formatter"
+            subtitleLabel.stringValue = "Validate and prettify raw JSON"
+            inputCardTitle.stringValue = "RAW JSON"
+            previewCardTitle.stringValue = "FORMATTED JSON"
+            webView.isHidden = true
+            outputScrollView.isHidden = false
+            applyInputTypography(monospaced: true)
+
+        case .jsonParseStringify:
+            titleLabel.stringValue = "JSON Parse/Stringify"
+            subtitleLabel.stringValue = "Convert JSON strings and JSON objects"
+            webView.isHidden = true
+            outputScrollView.isHidden = false
+            applyInputTypography(monospaced: true)
+            updateJSONTransformTitles()
+        }
+
+        applyJSONTransformControlVisibility()
+        placeholderLabel.stringValue = inputPlaceholderText()
+        updatePlaceholderVisibility()
+    }
+
+    private func applyJSONTransformControlVisibility() {
+        let shouldShowTransformControl = selectedToolMode == .jsonParseStringify
+        jsonTransformModeControl.isHidden = !shouldShowTransformControl
+        inputTitleTrailingToTransformConstraint.isActive = shouldShowTransformControl
+        inputTitleTrailingToCardConstraint.isActive = !shouldShowTransformControl
+    }
+
+    private func updateJSONTransformTitles() {
+        switch selectedJSONStringTransformMode {
+        case .parse:
+            inputCardTitle.stringValue = "JSON STRING"
+            previewCardTitle.stringValue = "PARSED JSON"
+        case .stringify:
+            inputCardTitle.stringValue = "JSON OBJECT"
+            previewCardTitle.stringValue = "JSON STRING"
+        }
+    }
+
+    private func applyInputTypography(monospaced: Bool) {
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = monospaced ? 4 : 6
+
+        let font: NSFont
+        if monospaced {
+            font = NSFont.monospacedSystemFont(ofSize: 13.5, weight: .regular)
+        } else {
+            font = NSFont.systemFont(ofSize: 15, weight: .regular)
+        }
+
+        textView.font = font
+        textView.textColor = NSColor(calibratedWhite: 0.92, alpha: 0.96)
+        textView.defaultParagraphStyle = paragraphStyle
+        textView.typingAttributes = [
+            .font: font,
+            .foregroundColor: NSColor(calibratedWhite: 0.92, alpha: 0.96),
+            .paragraphStyle: paragraphStyle,
+        ]
+    }
+
+    private func inputPlaceholderText() -> String {
+        switch selectedToolMode {
+        case .markdown:
+            return "Write markdown here..."
+        case .jsonFormat:
+            return "Paste raw JSON here..."
+        case .jsonParseStringify:
+            switch selectedJSONStringTransformMode {
+            case .parse:
+                return "Paste a JSON string literal, e.g. \"{\\\"name\\\":\\\"Ada\\\"}\""
+            case .stringify:
+                return "Paste a JSON object/value to stringify..."
+            }
+        }
+    }
+
+    private func outputPlaceholderText() -> String {
+        switch selectedToolMode {
+        case .markdown:
+            return ""
+        case .jsonFormat:
+            return "Formatted JSON appears here."
+        case .jsonParseStringify:
+            switch selectedJSONStringTransformMode {
+            case .parse:
+                return "Parsed JSON appears here."
+            case .stringify:
+                return "Stringified JSON appears here."
+            }
+        }
     }
 
     // MARK: - Template Loading
@@ -446,11 +680,17 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
 
     func textDidChange(_ notification: Notification) {
         updatePlaceholderVisibility()
+        scheduleProcessing()
+    }
+
+    private func scheduleProcessing() {
         renderTimer?.invalidate()
         renderTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: false) { [weak self] _ in
-            self?.renderMarkdown()
+            self?.processInput()
         }
     }
+
+    // MARK: - Actions
 
     @objc
     private func autoPasteToggleChanged(_ sender: NSSwitch) {
@@ -467,9 +707,33 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         UserDefaults.standard.set(mode.rawValue, forKey: Self.splitModeDefaultsKey)
         applySplitLayout(mode: mode)
     }
-    
-    
-    
+
+    @objc
+    private func toolModeChanged(_ sender: NSSegmentedControl) {
+        let mode = ToolMode(rawValue: sender.selectedSegment) ?? .markdown
+        UserDefaults.standard.set(mode.rawValue, forKey: Self.toolModeDefaultsKey)
+        applyToolModeUI()
+        processInput()
+        DispatchQueue.main.async { [weak self] in
+            self?.focusInput()
+        }
+    }
+
+    @objc
+    private func jsonStringTransformModeChanged(_ sender: NSSegmentedControl) {
+        let mode = JSONStringTransformMode(rawValue: sender.selectedSegment) ?? .parse
+        UserDefaults.standard.set(mode.rawValue, forKey: Self.jsonTransformModeDefaultsKey)
+        if selectedToolMode == .jsonParseStringify {
+            updateJSONTransformTitles()
+            placeholderLabel.stringValue = inputPlaceholderText()
+            updatePlaceholderVisibility()
+            processInput()
+            DispatchQueue.main.async { [weak self] in
+                self?.focusInput()
+            }
+        }
+    }
+
     @objc
     private func closeButtonPressed(_ sender: NSButton) {
         if let panel = view.window as? OverlayPanel {
@@ -485,20 +749,135 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
         isTemplateLoaded = true
         if pendingRender {
             pendingRender = false
-            renderMarkdown()
+            processInput()
         }
     }
 
-    // MARK: - Rendering
+    // MARK: - Processing
+
+    private func processInput() {
+        switch selectedToolMode {
+        case .markdown:
+            renderMarkdown()
+        case .jsonFormat:
+            renderJSONFormat()
+        case .jsonParseStringify:
+            renderJSONStringTransform()
+        }
+    }
 
     private func renderMarkdown() {
         guard isTemplateLoaded else {
             pendingRender = true
             return
         }
+
         let text = textView.string
         let base64 = Data(text.utf8).base64EncodedString()
         webView.evaluateJavaScript("renderMarkdown(atob('\(base64)'))", completionHandler: nil)
+    }
+
+    private func renderJSONFormat() {
+        let raw = textView.string
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            setOutputText(outputPlaceholderText(), kind: .placeholder)
+            return
+        }
+
+        do {
+            let value = try parseJSONValue(from: raw)
+            let formatted = try encodeJSON(value: value, pretty: true)
+            setOutputText(formatted, kind: .normal)
+        } catch {
+            setOutputText("Invalid JSON.\n\(error.localizedDescription)", kind: .error)
+        }
+    }
+
+    private func renderJSONStringTransform() {
+        let raw = textView.string
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            setOutputText(outputPlaceholderText(), kind: .placeholder)
+            return
+        }
+
+        switch selectedJSONStringTransformMode {
+        case .parse:
+            do {
+                let innerJSONString = try decodeJSONStringLiteral(from: raw)
+                let value: Any
+                do {
+                    value = try parseJSONValue(from: innerJSONString)
+                } catch {
+                    throw JSONToolError.embeddedJSONInvalid(error.localizedDescription)
+                }
+                let formatted = try encodeJSON(value: value, pretty: true)
+                setOutputText(formatted, kind: .normal)
+            } catch {
+                setOutputText("\(error.localizedDescription)", kind: .error)
+            }
+
+        case .stringify:
+            do {
+                let value = try parseJSONValue(from: raw)
+                let canonicalJSON = try encodeJSON(value: value, pretty: false)
+                let encoded = try JSONEncoder().encode(canonicalJSON)
+                let stringified = String(decoding: encoded, as: UTF8.self)
+                setOutputText(stringified, kind: .normal)
+            } catch {
+                setOutputText("Invalid JSON value.\n\(error.localizedDescription)", kind: .error)
+            }
+        }
+    }
+
+    private func parseJSONValue(from text: String) throws -> Any {
+        let data = Data(text.utf8)
+        return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+    }
+
+    private func encodeJSON(value: Any, pretty: Bool) throws -> String {
+        var options: JSONSerialization.WritingOptions = [.sortedKeys, .fragmentsAllowed]
+        if pretty {
+            options.insert(.prettyPrinted)
+        }
+        let data = try JSONSerialization.data(withJSONObject: value, options: options)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func decodeJSONStringLiteral(from text: String) throws -> String {
+        let data = Data(text.utf8)
+        do {
+            return try JSONDecoder().decode(String.self, from: data)
+        } catch {
+            throw JSONToolError.expectedJSONStringLiteral(error.localizedDescription)
+        }
+    }
+
+    private enum OutputTextKind {
+        case normal
+        case error
+        case placeholder
+    }
+
+    private func setOutputText(_ text: String, kind: OutputTextKind) {
+        let color: NSColor
+        switch kind {
+        case .normal:
+            color = NSColor(calibratedWhite: 0.90, alpha: 0.95)
+        case .error:
+            color = NSColor(calibratedRed: 1.0, green: 0.56, blue: 0.56, alpha: 0.97)
+        case .placeholder:
+            color = NSColor(calibratedWhite: 0.72, alpha: 0.58)
+        }
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 4
+
+        let attributed = NSAttributedString(string: text, attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
+            .foregroundColor: color,
+            .paragraphStyle: paragraphStyle,
+        ])
+        outputTextView.textStorage?.setAttributedString(attributed)
     }
 
     private func updatePlaceholderVisibility() {
@@ -514,10 +893,11 @@ class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationD
     func prefillFromClipboard() {
         guard isAutoPasteEnabled else { return }
         guard textView.string.isEmpty else { return }
+
         if let clipboardString = NSPasteboard.general.string(forType: .string), !clipboardString.isEmpty {
             textView.string = clipboardString
             updatePlaceholderVisibility()
-            renderMarkdown()
+            processInput()
         }
     }
 
