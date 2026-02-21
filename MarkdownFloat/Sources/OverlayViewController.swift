@@ -82,11 +82,15 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private var webView: WKWebView!
     private var outputScrollView: NSScrollView!
     private var outputTextView: NSTextView!
+    private var copyInputButton: NSButton!
+    private var copyOutputButton: NSButton!
 
     private var splitLayoutConstraints: [NSLayoutConstraint] = []
     private var inputTitleTrailingToTransformConstraint: NSLayoutConstraint!
     private var inputTitleTrailingToCardConstraint: NSLayoutConstraint!
 
+    private var modeTextStorage: [ToolMode: String] = [:]
+    private var currentToolMode: ToolMode = .markdown
     private var renderTimer: Timer?
     private var isTemplateLoaded = false
     private var pendingRender = false
@@ -110,7 +114,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     override func loadView() {
         let container = NSView()
         container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor(calibratedRed: 0.08, green: 0.09, blue: 0.11, alpha: 0.34).cgColor
+        container.layer?.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 0.48).cgColor
         self.view = container
     }
 
@@ -125,6 +129,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         ])
 
         setupHeader()
+        currentToolMode = ToolMode(rawValue: toolModeControl.selectedSegment) ?? .markdown
         setupInputCard()
         setupPreviewCard()
         setupConstraints()
@@ -204,14 +209,17 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         placeholderLabel.font = NSFont.systemFont(ofSize: 14, weight: .regular)
         placeholderLabel.textColor = NSColor(calibratedWhite: 0.70, alpha: 0.55)
 
+        copyInputButton = makeCopyButton(action: #selector(copyInputPressed(_:)))
+
         inputCard.addSubview(inputCardTitle)
         inputCard.addSubview(jsonTransformModeControl)
+        inputCard.addSubview(copyInputButton)
         inputCard.addSubview(scrollView)
         inputCard.addSubview(placeholderLabel)
         view.addSubview(inputCard)
 
         inputTitleTrailingToTransformConstraint = inputCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: jsonTransformModeControl.leadingAnchor, constant: -8)
-        inputTitleTrailingToCardConstraint = inputCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: inputCard.trailingAnchor, constant: -14)
+        inputTitleTrailingToCardConstraint = inputCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: copyInputButton.leadingAnchor, constant: -8)
 
         NSLayoutConstraint.activate([
             inputCardTitle.topAnchor.constraint(equalTo: inputCard.topAnchor, constant: 12),
@@ -219,7 +227,12 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             inputTitleTrailingToTransformConstraint,
 
             jsonTransformModeControl.centerYAnchor.constraint(equalTo: inputCardTitle.centerYAnchor),
-            jsonTransformModeControl.trailingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: -12),
+            jsonTransformModeControl.trailingAnchor.constraint(equalTo: copyInputButton.leadingAnchor, constant: -8),
+
+            copyInputButton.centerYAnchor.constraint(equalTo: inputCardTitle.centerYAnchor),
+            copyInputButton.trailingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: -12),
+            copyInputButton.widthAnchor.constraint(equalToConstant: 26),
+            copyInputButton.heightAnchor.constraint(equalToConstant: 22),
 
             scrollView.topAnchor.constraint(equalTo: inputCardTitle.bottomAnchor, constant: 10),
             scrollView.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 14),
@@ -254,7 +267,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         outputTextView = makeReadonlyTextView()
         outputScrollView.documentView = outputTextView
 
+        copyOutputButton = makeCopyButton(action: #selector(copyOutputPressed(_:)))
+
         previewCard.addSubview(previewCardTitle)
+        previewCard.addSubview(copyOutputButton)
         previewCard.addSubview(webView)
         previewCard.addSubview(outputScrollView)
         view.addSubview(previewCard)
@@ -262,6 +278,12 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         NSLayoutConstraint.activate([
             previewCardTitle.topAnchor.constraint(equalTo: previewCard.topAnchor, constant: 12),
             previewCardTitle.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: 14),
+            previewCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: copyOutputButton.leadingAnchor, constant: -8),
+
+            copyOutputButton.centerYAnchor.constraint(equalTo: previewCardTitle.centerYAnchor),
+            copyOutputButton.trailingAnchor.constraint(equalTo: previewCard.trailingAnchor, constant: -12),
+            copyOutputButton.widthAnchor.constraint(equalToConstant: 26),
+            copyOutputButton.heightAnchor.constraint(equalToConstant: 22),
 
             webView.topAnchor.constraint(equalTo: previewCardTitle.bottomAnchor, constant: 10),
             webView.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: 8),
@@ -375,7 +397,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         card.layer?.masksToBounds = true
         card.layer?.borderWidth = 1
         card.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
-        card.layer?.backgroundColor = NSColor(calibratedRed: 0.10, green: 0.11, blue: 0.14, alpha: 0.34).cgColor
+        card.layer?.backgroundColor = NSColor(calibratedRed: 0.08, green: 0.09, blue: 0.12, alpha: 0.42).cgColor
         return card
     }
 
@@ -422,19 +444,41 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         button.isBordered = false
         button.bezelStyle = .regularSquare
         button.title = ""
-        button.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")
+        let closeConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .bold)
+        button.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")?.withSymbolConfiguration(closeConfig)
         button.imageScaling = .scaleProportionallyDown
-        button.contentTintColor = NSColor(calibratedWhite: 1.0, alpha: 0.62)
-        button.alphaValue = 0.80
+        button.contentTintColor = NSColor(calibratedWhite: 1.0, alpha: 0.70)
         button.wantsLayer = true
         button.layer?.cornerRadius = 7.5
         button.layer?.borderWidth = 1
-        button.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.10).cgColor
-        button.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.05).cgColor
+        button.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.12).cgColor
+        button.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.06).cgColor
         button.toolTip = "Close (Esc)"
         button.target = self
         button.action = #selector(closeButtonPressed(_:))
         button.setButtonType(.momentaryPushIn)
+        return button
+    }
+
+    private func makeCopyButton(action: Selector) -> NSButton {
+        let button = NSButton()
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.isBordered = false
+        button.bezelStyle = .regularSquare
+        button.setButtonType(.momentaryPushIn)
+        button.title = ""
+        let config = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .medium)
+        button.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")?.withSymbolConfiguration(config)
+        button.imageScaling = .scaleProportionallyDown
+        button.contentTintColor = NSColor(calibratedWhite: 1.0, alpha: 0.45)
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 6
+        button.layer?.borderWidth = 1
+        button.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.08).cgColor
+        button.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.03).cgColor
+        button.toolTip = "Copy to clipboard"
+        button.target = self
+        button.action = action
         return button
     }
 
@@ -569,6 +613,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             previewCardTitle.stringValue = "PREVIEW"
             webView.isHidden = false
             outputScrollView.isHidden = true
+            copyOutputButton.isHidden = true
             applyInputTypography(monospaced: false)
 
         case .jsonFormat:
@@ -578,6 +623,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             previewCardTitle.stringValue = "FORMATTED JSON"
             webView.isHidden = true
             outputScrollView.isHidden = false
+            copyOutputButton.isHidden = false
             applyInputTypography(monospaced: true)
 
         case .jsonParseStringify:
@@ -585,6 +631,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             subtitleLabel.stringValue = "Convert JSON strings and JSON objects"
             webView.isHidden = true
             outputScrollView.isHidden = false
+            copyOutputButton.isHidden = false
             applyInputTypography(monospaced: true)
             updateJSONTransformTitles()
         }
@@ -719,8 +766,14 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     @objc
     private func toolModeChanged(_ sender: NSSegmentedControl) {
+        modeTextStorage[currentToolMode] = textView.string
+
         let mode = ToolMode(rawValue: sender.selectedSegment) ?? .markdown
+        currentToolMode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: Self.toolModeDefaultsKey)
+
+        textView.string = modeTextStorage[mode] ?? ""
+
         applyToolModeUI()
         processInput()
         DispatchQueue.main.async { [weak self] in
@@ -750,6 +803,38 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             return
         }
         view.window?.orderOut(nil)
+    }
+
+    @objc
+    private func copyInputPressed(_ sender: NSButton) {
+        let text = textView.string
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        showCopyFeedback(on: sender)
+    }
+
+    @objc
+    private func copyOutputPressed(_ sender: NSButton) {
+        let text = outputTextView.string
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        showCopyFeedback(on: sender)
+    }
+
+    private func showCopyFeedback(on button: NSButton) {
+        let originalImage = button.image
+        let originalTint = button.contentTintColor
+
+        let checkConfig = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .medium)
+        button.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Copied")?.withSymbolConfiguration(checkConfig)
+        button.contentTintColor = NSColor(calibratedRed: 0.45, green: 0.82, blue: 0.68, alpha: 0.95)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak button] in
+            button?.image = originalImage
+            button?.contentTintColor = originalTint
+        }
     }
 
     // MARK: - WKNavigationDelegate
