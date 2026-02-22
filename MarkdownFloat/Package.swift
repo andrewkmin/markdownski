@@ -5,10 +5,19 @@ let package = Package(
     name: "MarkdownFloat",
     platforms: [.macOS(.v13)],
     targets: [
+        .target(
+            name: "MarkdownFloatLib",
+            path: "Lib",
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("Carbon")
+            ]
+        ),
         .executableTarget(
             name: "MarkdownFloat",
+            dependencies: ["MarkdownFloatLib"],
             path: ".",
-            exclude: ["Info.plist", "Makefile", "MarkdownFloat.app"],
+            exclude: ["Info.plist", "Makefile", "MarkdownFloat.app", "Lib", "Tests"],
             sources: ["Sources"],
             resources: [
                 .copy("Resources/markdown-template.html"),
@@ -19,6 +28,11 @@ let package = Package(
                 .linkedFramework("WebKit"),
                 .linkedFramework("Carbon")
             ]
+        ),
+        .testTarget(
+            name: "MarkdownFloatTests",
+            dependencies: ["MarkdownFloatLib"],
+            path: "Tests"
         )
     ]
 )
