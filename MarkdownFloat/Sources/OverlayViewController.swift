@@ -102,6 +102,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private var isRecordingHotkey = false
     private var hotkeyEventMonitor: Any?
     private var chipRejectionWorkItem: DispatchWorkItem?
+    private var isCursorPushed = false
 
     private var isAutoPasteEnabled: Bool {
         UserDefaults.standard.bool(forKey: Self.autoPasteDefaultsKey)
@@ -433,13 +434,13 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         chip.layer?.cornerRadius = 999
         chip.layer?.masksToBounds = true
         chip.layer?.borderWidth = 1
-        chip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.18).cgColor
-        chip.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.12).cgColor
+        chip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.28).cgColor
+        chip.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.18).cgColor
 
         let label = NSTextField(labelWithString: text)
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
-        label.textColor = NSColor(calibratedWhite: 0.92, alpha: 0.78)
+        label.textColor = NSColor(calibratedWhite: 0.95, alpha: 0.92)
 
         chip.addSubview(label)
         NSLayoutConstraint.activate([
@@ -777,21 +778,30 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     override func mouseEntered(with event: NSEvent) {
         guard !isRecordingHotkey else { return }
-        NSCursor.pointingHand.push()
+        if !isCursorPushed {
+            NSCursor.pointingHand.push()
+            isCursorPushed = true
+        }
         shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.22).cgColor
     }
 
     override func mouseExited(with event: NSEvent) {
-        NSCursor.pop()
+        if isCursorPushed {
+            NSCursor.pop()
+            isCursorPushed = false
+        }
         if !isRecordingHotkey {
-            shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
+            shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.20).cgColor
         }
     }
 
     @objc
     private func shortcutChipClicked(_ sender: NSClickGestureRecognizer) {
         guard !isRecordingHotkey else { return }
-        NSCursor.pop()
+        if isCursorPushed {
+            NSCursor.pop()
+            isCursorPushed = false
+        }
         startRecordingHotkey()
     }
 
@@ -802,14 +812,19 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         shortcutChip.layer?.borderWidth = 1.5
 
         hotkeyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            // Forward Cmd+Q to the system so the user can always quit
+            let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            if flags == [.command] && event.keyCode == 0x0C {
+                return event
+            }
             self?.handleRecordedKey(event)
-            return nil // swallow the event
+            return nil
         }
     }
 
     private func stopRecordingHotkey() {
         isRecordingHotkey = false
-        shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
+        shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.20).cgColor
         shortcutChip.layer?.borderWidth = 1
 
         if let monitor = hotkeyEventMonitor {
@@ -848,7 +863,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             }
         }
 
-        hotkeyManager?.reregister(keyCode: code, modifiers: carbonMods)
+        guard hotkeyManager?.reregister(keyCode: code, modifiers: carbonMods) == true else {
+            showChipRejection("Shortcut unavailable")
+            return
+        }
         stopRecordingHotkey()
         updateShortcutLabel()
     }
