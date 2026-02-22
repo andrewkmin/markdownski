@@ -64,8 +64,9 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     private var titleLabel: NSTextField!
     private var subtitleLabel: NSTextField!
-    private var shortcutChip: NSVisualEffectView!
+    private var shortcutChip: NSView!
     private var toolModeControl: NSSegmentedControl!
+    private var clearAllButton: NSButton!
     private var autoPasteLabel: NSTextField!
     private var autoPasteToggle: NSSwitch!
     private var splitModeControl: NSSegmentedControl!
@@ -195,12 +196,15 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         let savedSplitModeRaw = UserDefaults.standard.integer(forKey: Self.splitModeDefaultsKey)
         splitModeControl.selectedSegment = SplitMode(rawValue: savedSplitModeRaw)?.rawValue ?? SplitMode.horizontal.rawValue
 
+        clearAllButton = makeClearAllButton()
+
         closeButton = makeCloseButton()
 
         view.addSubview(titleLabel)
         view.addSubview(subtitleLabel)
         view.addSubview(shortcutChip)
         view.addSubview(toolModeControl)
+        view.addSubview(clearAllButton)
         view.addSubview(autoPasteLabel)
         view.addSubview(autoPasteToggle)
         view.addSubview(splitModeControl)
@@ -344,7 +348,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
             toolModeControl.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 12),
             toolModeControl.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            toolModeControl.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -outerPadding),
+
+            clearAllButton.centerYAnchor.constraint(equalTo: toolModeControl.centerYAnchor),
+            clearAllButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -outerPadding),
+            clearAllButton.leadingAnchor.constraint(greaterThanOrEqualTo: toolModeControl.trailingAnchor, constant: 12),
         ])
 
         applySplitLayout(mode: selectedSplitMode)
@@ -419,18 +426,15 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         return label
     }
 
-    private func makeChip(text: String) -> NSVisualEffectView {
-        let chip = NSVisualEffectView()
+    private func makeChip(text: String) -> NSView {
+        let chip = NSView()
         chip.translatesAutoresizingMaskIntoConstraints = false
-        chip.material = .hudWindow
-        chip.blendingMode = .withinWindow
-        chip.state = .active
         chip.wantsLayer = true
         chip.layer?.cornerRadius = 999
         chip.layer?.masksToBounds = true
         chip.layer?.borderWidth = 1
-        chip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.10).cgColor
-        chip.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.04).cgColor
+        chip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.18).cgColor
+        chip.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.12).cgColor
 
         let label = NSTextField(labelWithString: text)
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -461,6 +465,19 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         button.toolTip = "Close (Esc)"
         button.target = self
         button.action = #selector(closeButtonPressed(_:))
+        button.setButtonType(.momentaryPushIn)
+        return button
+    }
+
+    private func makeClearAllButton() -> NSButton {
+        let button = NSButton()
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.isBordered = false
+        button.title = "Clear All"
+        button.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        button.contentTintColor = NSColor(calibratedWhite: 0.82, alpha: 0.65)
+        button.target = self
+        button.action = #selector(clearAllPressed(_:))
         button.setButtonType(.momentaryPushIn)
         return button
     }
@@ -850,6 +867,15 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private func updateShortcutLabel() {
         guard let manager = hotkeyManager else { return }
         shortcutLabel?.stringValue = manager.displayString
+    }
+
+    @objc
+    private func clearAllPressed(_ sender: NSButton) {
+        modeTextStorage.removeAll()
+        textView.string = ""
+        textView.undoManager?.removeAllActions()
+        updatePlaceholderVisibility()
+        processInput()
     }
 
     @objc
