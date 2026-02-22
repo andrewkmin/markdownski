@@ -24,8 +24,17 @@ public class HotkeyManager {
 
         let defaults = UserDefaults.standard
         if defaults.object(forKey: Self.keyCodeDefaultsKey) != nil {
-            self.keyCode = UInt32(defaults.integer(forKey: Self.keyCodeDefaultsKey))
-            self.modifiers = UInt32(defaults.integer(forKey: Self.modifiersDefaultsKey))
+            let loadedCode = UInt32(defaults.integer(forKey: Self.keyCodeDefaultsKey))
+            let loadedMods = UInt32(defaults.integer(forKey: Self.modifiersDefaultsKey))
+            if Self.hasRequiredModifier(loadedMods) {
+                self.keyCode = loadedCode
+                self.modifiers = loadedMods
+            } else {
+                self.keyCode = Self.defaultKeyCode
+                self.modifiers = Self.defaultModifiers
+                defaults.set(Int(Self.defaultKeyCode), forKey: Self.keyCodeDefaultsKey)
+                defaults.set(Int(Self.defaultModifiers), forKey: Self.modifiersDefaultsKey)
+            }
         } else {
             self.keyCode = Self.defaultKeyCode
             self.modifiers = Self.defaultModifiers
@@ -37,13 +46,25 @@ public class HotkeyManager {
 
     // MARK: - Public
 
-    public func reregister(keyCode: UInt32, modifiers: UInt32) {
+    @discardableResult
+    public func reregister(keyCode: UInt32, modifiers: UInt32) -> Bool {
+        let previousKeyCode = self.keyCode
+        let previousModifiers = self.modifiers
+
         unregisterHotkey()
         self.keyCode = keyCode
         self.modifiers = modifiers
+
+        guard registerHotkey() else {
+            self.keyCode = previousKeyCode
+            self.modifiers = previousModifiers
+            registerHotkey()
+            return false
+        }
+
         UserDefaults.standard.set(Int(keyCode), forKey: Self.keyCodeDefaultsKey)
         UserDefaults.standard.set(Int(modifiers), forKey: Self.modifiersDefaultsKey)
-        registerHotkey()
+        return true
     }
 
     // MARK: - Private
@@ -74,14 +95,20 @@ public class HotkeyManager {
         handlerRef = handler
     }
 
-    private func registerHotkey() {
+    @discardableResult
+    private func registerHotkey() -> Bool {
         var hotKeyID = EventHotKeyID()
         hotKeyID.signature = OSType(0x4D464C54) // "MFLT"
         hotKeyID.id = 1
 
         var ref: EventHotKeyRef?
-        RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref)
+        guard status == noErr else {
+            NSLog("RegisterEventHotKey failed with status %d for keyCode=0x%X modifiers=0x%X", status, keyCode, modifiers)
+            return false
+        }
         hotkeyRef = ref
+        return true
     }
 
     private func unregisterHotkey() {
@@ -89,6 +116,12 @@ public class HotkeyManager {
             UnregisterEventHotKey(ref)
             hotkeyRef = nil
         }
+    }
+
+    // MARK: - Validation
+
+    public static func hasRequiredModifier(_ carbonModifiers: UInt32) -> Bool {
+        return carbonModifiers & UInt32(cmdKey) != 0 || carbonModifiers & UInt32(controlKey) != 0
     }
 
     // MARK: - Display Helpers

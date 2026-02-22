@@ -297,6 +297,43 @@ final class HotkeyManagerDisplayStringTests: XCTestCase {
     }
 }
 
+// MARK: - hasRequiredModifier(_:)
+
+final class HotkeyManagerModifierValidationTests: XCTestCase {
+
+    func testHasRequiredModifierWithCommand() {
+        XCTAssertTrue(HotkeyManager.hasRequiredModifier(UInt32(cmdKey)))
+    }
+
+    func testHasRequiredModifierWithControl() {
+        XCTAssertTrue(HotkeyManager.hasRequiredModifier(UInt32(controlKey)))
+    }
+
+    func testHasRequiredModifierWithCommandShift() {
+        XCTAssertTrue(HotkeyManager.hasRequiredModifier(UInt32(cmdKey) | UInt32(shiftKey)))
+    }
+
+    func testHasRequiredModifierWithControlOption() {
+        XCTAssertTrue(HotkeyManager.hasRequiredModifier(UInt32(controlKey) | UInt32(optionKey)))
+    }
+
+    func testHasRequiredModifierWithZero() {
+        XCTAssertFalse(HotkeyManager.hasRequiredModifier(0))
+    }
+
+    func testHasRequiredModifierWithShiftOnly() {
+        XCTAssertFalse(HotkeyManager.hasRequiredModifier(UInt32(shiftKey)))
+    }
+
+    func testHasRequiredModifierWithOptionOnly() {
+        XCTAssertFalse(HotkeyManager.hasRequiredModifier(UInt32(optionKey)))
+    }
+
+    func testHasRequiredModifierWithShiftOption() {
+        XCTAssertFalse(HotkeyManager.hasRequiredModifier(UInt32(shiftKey) | UInt32(optionKey)))
+    }
+}
+
 // MARK: - Round-trip: carbonModifiers → displayString
 
 final class HotkeyManagerRoundTripTests: XCTestCase {
