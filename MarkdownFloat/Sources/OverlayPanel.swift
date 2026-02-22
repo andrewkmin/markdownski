@@ -3,7 +3,8 @@ import AppKit
 class OverlayPanel: NSPanel {
     var overlayViewController: OverlayViewController?
     private var isAnimating = false
-    private let visibleAlpha: CGFloat = 0.95
+    private var pendingToggle = false
+    private let visibleAlpha: CGFloat = 0.98
 
     init() {
         let screen = NSScreen.main ?? NSScreen.screens[0]
@@ -43,7 +44,7 @@ class OverlayPanel: NSPanel {
         visualEffectView.layer?.masksToBounds = true
         visualEffectView.layer?.borderWidth = 1
         visualEffectView.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.07).cgColor
-        visualEffectView.layer?.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 0.44).cgColor
+        visualEffectView.layer?.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 0.55).cgColor
         visualEffectView.autoresizingMask = [.width, .height]
         self.contentView = visualEffectView
 
@@ -63,7 +64,11 @@ class OverlayPanel: NSPanel {
     }
 
     func show() {
-        guard !isAnimating else { return }
+        guard !isAnimating else {
+            pendingToggle = true
+            return
+        }
+        pendingToggle = false
         isAnimating = true
 
         overlayViewController?.prefillFromClipboard()
@@ -86,16 +91,18 @@ class OverlayPanel: NSPanel {
             self.animator().setFrame(finalFrame, display: true)
         }, completionHandler: { [weak self] in
             self?.isAnimating = false
-        })
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) { [weak self] in
             self?.overlayViewController?.focusInput()
-        }
+            self?.drainPendingToggle()
+        })
     }
 
     func hide() {
-        guard !isAnimating else { return }
+        guard !isAnimating else {
+            pendingToggle = true
+            return
+        }
         overlayViewController?.cancelHotkeyRecordingIfActive()
+        pendingToggle = false
         isAnimating = true
 
         NSAnimationContext.runAnimationGroup({ context in
@@ -105,6 +112,7 @@ class OverlayPanel: NSPanel {
         }, completionHandler: { [weak self] in
             self?.orderOut(nil)
             self?.isAnimating = false
+            self?.drainPendingToggle()
         })
     }
 
@@ -114,5 +122,11 @@ class OverlayPanel: NSPanel {
         } else {
             show()
         }
+    }
+
+    private func drainPendingToggle() {
+        guard pendingToggle else { return }
+        pendingToggle = false
+        toggle()
     }
 }
