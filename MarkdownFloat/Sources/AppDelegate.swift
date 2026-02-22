@@ -1,14 +1,16 @@
 import AppKit
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    let panel = OverlayPanel()
-    var hotkeyManager: HotkeyManager?
+    let panel: OverlayPanel
+    let hotkeyManager: HotkeyManager
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        hotkeyManager = HotkeyManager { [weak self] in
-            self?.panel.toggle()
+    override init() {
+        let p = OverlayPanel()
+        self.panel = p
+        self.hotkeyManager = HotkeyManager { [weak p] in
+            p?.toggle()
         }
+        super.init()
         panel.overlayViewController?.hotkeyManager = hotkeyManager
-        // Panel stays hidden until hotkey — don't show on launch
     }
 }
