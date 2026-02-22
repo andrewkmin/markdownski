@@ -458,11 +458,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         button.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")?.withSymbolConfiguration(closeConfig)
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = NSColor(calibratedWhite: 1.0, alpha: 0.70)
-        button.wantsLayer = true
-        button.layer?.cornerRadius = 7.5
-        button.layer?.borderWidth = 1
-        button.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.12).cgColor
-        button.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.06).cgColor
         button.toolTip = "Close (Esc)"
         button.target = self
         button.action = #selector(closeButtonPressed(_:))
@@ -480,11 +475,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         button.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")?.withSymbolConfiguration(Self.copyIconConfig)
         button.imageScaling = .scaleProportionallyDown
         button.contentTintColor = NSColor(calibratedWhite: 1.0, alpha: 0.45)
-        button.wantsLayer = true
-        button.layer?.cornerRadius = 6
-        button.layer?.borderWidth = 1
-        button.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.08).cgColor
-        button.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.03).cgColor
         button.toolTip = "Copy to clipboard"
         button.target = self
         button.action = action
@@ -680,7 +670,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         case .jsonFormat:
             return "Paste raw JSON here..."
         case .jsonParse:
-            return "Paste a JSON string literal, e.g. \"{\\\"name\\\":\\\"Ada\\\"}\""
+            return "Paste a JSON string literal..."
         case .jsonStringify:
             return "Paste a JSON object/value to stringify..."
         }
