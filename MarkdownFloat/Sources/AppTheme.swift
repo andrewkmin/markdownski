@@ -19,10 +19,10 @@ enum AppColors {
     static let clearAllText = NSColor(calibratedWhite: 0.82, alpha: 0.65)
 
     // Borders & Backgrounds
-    static let chipBorder = NSColor(calibratedWhite: 1, alpha: 0.28)
-    static let chipBorderDefault = NSColor(calibratedWhite: 1, alpha: 0.20)
-    static let chipBorderHover = NSColor(calibratedWhite: 1, alpha: 0.22)
-    static let chipBackground = NSColor(calibratedWhite: 1.0, alpha: 0.18)
+    static let chipBorder = NSColor(calibratedWhite: 1, alpha: 0.35)
+    static let chipBorderDefault = NSColor(calibratedWhite: 1, alpha: 0.28)
+    static let chipBorderHover = NSColor(calibratedWhite: 1, alpha: 0.40)
+    static let chipBackground = NSColor(calibratedWhite: 1.0, alpha: 0.22)
     static let cardBorder = NSColor(calibratedWhite: 1, alpha: 0.08)
     static let panelBorder = NSColor(calibratedWhite: 1.0, alpha: 0.07)
     static let containerBackground = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 0.48)
