@@ -38,9 +38,6 @@ private final class EditorTextView: NSTextView {
 }
 
 final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavigationDelegate {
-    static let minimumPanelWidth: CGFloat = 560
-
-    private static let accentGreen = NSColor(calibratedRed: 0.45, green: 0.82, blue: 0.68, alpha: 0.95)
     private static let copyIconConfig = NSImage.SymbolConfiguration(pointSize: 10.5, weight: .medium)
 
     private static let autoPasteDefaultsKey = "autoPasteFromClipboardEnabled"
@@ -100,7 +97,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     override func loadView() {
         let container = NSView()
         container.wantsLayer = true
-        container.layer?.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 0.48).cgColor
+        container.layer?.backgroundColor = AppColors.containerBackground.cgColor
         self.view = container
     }
 
@@ -130,12 +127,12 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         titleLabel = NSTextField(labelWithString: "Markdown")
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = NSFont.systemFont(ofSize: 22, weight: .semibold)
-        titleLabel.textColor = NSColor(calibratedWhite: 0.96, alpha: 0.98)
+        titleLabel.textColor = AppColors.titleText
 
         subtitleLabel = NSTextField(labelWithString: "Live preview in a floating workspace")
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.font = NSFont.systemFont(ofSize: 13, weight: .regular)
-        subtitleLabel.textColor = NSColor(calibratedWhite: 0.80, alpha: 0.84)
+        subtitleLabel.textColor = AppColors.subtitleText
 
         let initialShortcut: String = {
             let defaults = UserDefaults.standard
@@ -168,7 +165,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         autoPasteLabel = NSTextField(labelWithString: "Paste from clipboard")
         autoPasteLabel.translatesAutoresizingMaskIntoConstraints = false
         autoPasteLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
-        autoPasteLabel.textColor = NSColor(calibratedWhite: 0.82, alpha: 0.78)
+        autoPasteLabel.textColor = AppColors.secondaryLabel
         autoPasteLabel.lineBreakMode = .byTruncatingTail
 
         autoPasteToggle = NSSwitch()
@@ -207,14 +204,14 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         scrollView.scrollerStyle = .overlay
         scrollView.drawsBackground = false
 
-        textView = makeEditableTextView()
+        textView = makeBaseTextView(editable: true)
         textView.delegate = self
         scrollView.documentView = textView
 
         placeholderLabel = NSTextField(labelWithString: "Write markdown here...")
         placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
         placeholderLabel.font = NSFont.systemFont(ofSize: 14, weight: .regular)
-        placeholderLabel.textColor = NSColor(calibratedWhite: 0.70, alpha: 0.55)
+        placeholderLabel.textColor = AppColors.placeholderText
 
         copyInputButton = makeCopyButton(action: #selector(copyInputPressed(_:)))
 
@@ -225,8 +222,8 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         view.addSubview(inputCard)
 
         NSLayoutConstraint.activate([
-            inputCardTitle.topAnchor.constraint(equalTo: inputCard.topAnchor, constant: 12),
-            inputCardTitle.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 14),
+            inputCardTitle.topAnchor.constraint(equalTo: inputCard.topAnchor, constant: Layout.cardTitleTopPadding),
+            inputCardTitle.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: Layout.cardInnerPadding),
             inputCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: copyInputButton.leadingAnchor, constant: -8),
 
             copyInputButton.centerYAnchor.constraint(equalTo: inputCardTitle.centerYAnchor),
@@ -235,9 +232,9 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             copyInputButton.heightAnchor.constraint(equalToConstant: 22),
 
             scrollView.topAnchor.constraint(equalTo: inputCardTitle.bottomAnchor, constant: 10),
-            scrollView.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: 14),
-            scrollView.trailingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: -14),
-            scrollView.bottomAnchor.constraint(equalTo: inputCard.bottomAnchor, constant: -14),
+            scrollView.leadingAnchor.constraint(equalTo: inputCard.leadingAnchor, constant: Layout.cardInnerPadding),
+            scrollView.trailingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: -Layout.cardInnerPadding),
+            scrollView.bottomAnchor.constraint(equalTo: inputCard.bottomAnchor, constant: -Layout.cardInnerPadding),
 
             placeholderLabel.topAnchor.constraint(equalTo: scrollView.topAnchor, constant: 12),
             placeholderLabel.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor, constant: 6),
@@ -264,7 +261,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         outputScrollView.scrollerStyle = .overlay
         outputScrollView.drawsBackground = false
 
-        outputTextView = makeReadonlyTextView()
+        outputTextView = makeBaseTextView(editable: false)
         outputScrollView.documentView = outputTextView
 
         copyOutputButton = makeCopyButton(action: #selector(copyOutputPressed(_:)))
@@ -276,8 +273,8 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         view.addSubview(previewCard)
 
         NSLayoutConstraint.activate([
-            previewCardTitle.topAnchor.constraint(equalTo: previewCard.topAnchor, constant: 12),
-            previewCardTitle.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: 14),
+            previewCardTitle.topAnchor.constraint(equalTo: previewCard.topAnchor, constant: Layout.cardTitleTopPadding),
+            previewCardTitle.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: Layout.cardInnerPadding),
             previewCardTitle.trailingAnchor.constraint(lessThanOrEqualTo: copyOutputButton.leadingAnchor, constant: -8),
 
             copyOutputButton.centerYAnchor.constraint(equalTo: previewCardTitle.centerYAnchor),
@@ -291,9 +288,9 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             webView.bottomAnchor.constraint(equalTo: previewCard.bottomAnchor, constant: -8),
 
             outputScrollView.topAnchor.constraint(equalTo: previewCardTitle.bottomAnchor, constant: 10),
-            outputScrollView.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: 14),
-            outputScrollView.trailingAnchor.constraint(equalTo: previewCard.trailingAnchor, constant: -14),
-            outputScrollView.bottomAnchor.constraint(equalTo: previewCard.bottomAnchor, constant: -14),
+            outputScrollView.leadingAnchor.constraint(equalTo: previewCard.leadingAnchor, constant: Layout.cardInnerPadding),
+            outputScrollView.trailingAnchor.constraint(equalTo: previewCard.trailingAnchor, constant: -Layout.cardInnerPadding),
+            outputScrollView.bottomAnchor.constraint(equalTo: previewCard.bottomAnchor, constant: -Layout.cardInnerPadding),
         ])
 
         DispatchQueue.main.async { [weak self] in
@@ -302,13 +299,11 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     }
 
     private func setupConstraints() {
-        let outerPadding: CGFloat = 20
-
         NSLayoutConstraint.activate([
-            view.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumPanelWidth),
+            view.widthAnchor.constraint(greaterThanOrEqualToConstant: Layout.minimumPanelWidth),
 
-            closeButton.topAnchor.constraint(equalTo: view.topAnchor, constant: outerPadding + 2),
-            closeButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: outerPadding + 1),
+            closeButton.topAnchor.constraint(equalTo: view.topAnchor, constant: Layout.outerPadding + 2),
+            closeButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Layout.outerPadding + 1),
             closeButton.widthAnchor.constraint(equalToConstant: 15),
             closeButton.heightAnchor.constraint(equalToConstant: 15),
 
@@ -319,11 +314,11 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
 
             shortcutChip.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
-            shortcutChip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -outerPadding),
+            shortcutChip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
             shortcutChip.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 14),
 
             autoPasteToggle.centerYAnchor.constraint(equalTo: subtitleLabel.centerYAnchor),
-            autoPasteToggle.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -outerPadding),
+            autoPasteToggle.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
 
             autoPasteLabel.centerYAnchor.constraint(equalTo: autoPasteToggle.centerYAnchor),
             autoPasteLabel.trailingAnchor.constraint(equalTo: autoPasteToggle.leadingAnchor, constant: -8),
@@ -336,7 +331,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             toolModeControl.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
 
             clearAllButton.centerYAnchor.constraint(equalTo: toolModeControl.centerYAnchor),
-            clearAllButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -outerPadding),
+            clearAllButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
             clearAllButton.leadingAnchor.constraint(greaterThanOrEqualTo: toolModeControl.trailingAnchor, constant: 12),
         ])
 
@@ -347,19 +342,16 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         NSLayoutConstraint.deactivate(splitLayoutConstraints)
         splitLayoutConstraints.removeAll()
 
-        let outerPadding: CGFloat = 20
-        let splitSpacing: CGFloat = 14
-
         switch mode {
         case .horizontal:
             splitLayoutConstraints = [
-                inputCard.topAnchor.constraint(equalTo: toolModeControl.bottomAnchor, constant: 14),
-                inputCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: outerPadding),
-                inputCard.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -outerPadding),
+                inputCard.topAnchor.constraint(equalTo: toolModeControl.bottomAnchor, constant: Layout.splitSpacing),
+                inputCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Layout.outerPadding),
+                inputCard.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -Layout.outerPadding),
 
                 previewCard.topAnchor.constraint(equalTo: inputCard.topAnchor),
-                previewCard.leadingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: splitSpacing),
-                previewCard.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -outerPadding),
+                previewCard.leadingAnchor.constraint(equalTo: inputCard.trailingAnchor, constant: Layout.splitSpacing),
+                previewCard.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
                 previewCard.bottomAnchor.constraint(equalTo: inputCard.bottomAnchor),
 
                 inputCard.widthAnchor.constraint(equalTo: previewCard.widthAnchor),
@@ -370,14 +362,14 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             let inputPreferredHeight = inputCard.heightAnchor.constraint(equalTo: view.heightAnchor, multiplier: 0.36)
             inputPreferredHeight.priority = .defaultHigh
             splitLayoutConstraints = [
-                inputCard.topAnchor.constraint(equalTo: toolModeControl.bottomAnchor, constant: 14),
-                inputCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: outerPadding),
-                inputCard.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -outerPadding),
+                inputCard.topAnchor.constraint(equalTo: toolModeControl.bottomAnchor, constant: Layout.splitSpacing),
+                inputCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Layout.outerPadding),
+                inputCard.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
 
-                previewCard.topAnchor.constraint(equalTo: inputCard.bottomAnchor, constant: splitSpacing),
-                previewCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: outerPadding),
-                previewCard.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -outerPadding),
-                previewCard.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -outerPadding),
+                previewCard.topAnchor.constraint(equalTo: inputCard.bottomAnchor, constant: Layout.splitSpacing),
+                previewCard.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Layout.outerPadding),
+                previewCard.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
+                previewCard.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -Layout.outerPadding),
 
                 inputPreferredHeight,
                 inputCard.heightAnchor.constraint(greaterThanOrEqualToConstant: 190),
@@ -396,11 +388,11 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         card.blendingMode = .withinWindow
         card.state = .active
         card.wantsLayer = true
-        card.layer?.cornerRadius = 16
+        card.layer?.cornerRadius = Layout.cardCornerRadius
         card.layer?.masksToBounds = true
         card.layer?.borderWidth = 1
-        card.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.08).cgColor
-        card.layer?.backgroundColor = NSColor(calibratedRed: 0.08, green: 0.09, blue: 0.12, alpha: 0.42).cgColor
+        card.layer?.borderColor = AppColors.cardBorder.cgColor
+        card.layer?.backgroundColor = AppColors.cardBackground.cgColor
         return card
     }
 
@@ -408,7 +400,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         let label = NSTextField(labelWithString: text.uppercased())
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        label.textColor = NSColor(calibratedWhite: 0.82, alpha: 0.74)
+        label.textColor = AppColors.cardTitleText
         return label
     }
 
@@ -419,13 +411,13 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         chip.layer?.cornerRadius = 999
         chip.layer?.masksToBounds = true
         chip.layer?.borderWidth = 1
-        chip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.28).cgColor
-        chip.layer?.backgroundColor = NSColor(calibratedWhite: 1.0, alpha: 0.18).cgColor
+        chip.layer?.borderColor = AppColors.chipBorder.cgColor
+        chip.layer?.backgroundColor = AppColors.chipBackground.cgColor
 
         let label = NSTextField(labelWithString: text)
         label.translatesAutoresizingMaskIntoConstraints = false
         label.font = NSFont.systemFont(ofSize: 10.5, weight: .semibold)
-        label.textColor = NSColor(calibratedWhite: 0.95, alpha: 0.92)
+        label.textColor = AppColors.chipLabel
 
         chip.addSubview(label)
         NSLayoutConstraint.activate([
@@ -447,7 +439,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         let closeConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .bold)
         button.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")?.withSymbolConfiguration(closeConfig)
         button.imageScaling = .scaleProportionallyDown
-        button.contentTintColor = NSColor(calibratedWhite: 1.0, alpha: 0.70)
+        button.contentTintColor = AppColors.closeIcon
         button.toolTip = "Close (Esc)"
         button.target = self
         button.action = #selector(closeButtonPressed(_:))
@@ -461,7 +453,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         button.isBordered = false
         button.title = "Clear All"
         button.font = NSFont.systemFont(ofSize: 11, weight: .medium)
-        button.contentTintColor = NSColor(calibratedWhite: 0.82, alpha: 0.65)
+        button.contentTintColor = AppColors.clearAllText
         button.target = self
         button.action = #selector(clearAllPressed(_:))
         button.setButtonType(.momentaryPushIn)
@@ -477,7 +469,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         button.title = ""
         button.image = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")?.withSymbolConfiguration(Self.copyIconConfig)
         button.imageScaling = .scaleProportionallyDown
-        button.contentTintColor = NSColor(calibratedWhite: 1.0, alpha: 0.45)
+        button.contentTintColor = AppColors.iconDefault
         button.toolTip = "Copy to clipboard"
         button.target = self
         button.action = action
@@ -524,7 +516,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         return image.withSymbolConfiguration(config)
     }
 
-    private func makeEditableTextView() -> NSTextView {
+    private func makeBaseTextView(editable: Bool) -> EditorTextView {
         let textContainer = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
         textContainer.widthTracksTextView = true
         textContainer.heightTracksTextView = false
@@ -535,51 +527,30 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         let textStorage = NSTextStorage()
         textStorage.addLayoutManager(layoutManager)
 
-        let editor = EditorTextView(frame: .zero, textContainer: textContainer)
-        editor.isRichText = false
-        editor.backgroundColor = .clear
-        editor.drawsBackground = false
-        editor.textContainerInset = NSSize(width: 0, height: 10)
-        editor.isAutomaticQuoteSubstitutionEnabled = false
-        editor.isAutomaticDashSubstitutionEnabled = false
-        editor.isAutomaticTextReplacementEnabled = false
-        editor.isHorizontallyResizable = false
-        editor.isVerticallyResizable = true
-        editor.autoresizingMask = [.width]
-        editor.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        editor.minSize = NSSize(width: 0, height: 0)
-        editor.insertionPointColor = Self.accentGreen
-        return editor
-    }
+        let tv = EditorTextView(frame: .zero, textContainer: textContainer)
+        tv.isRichText = false
+        tv.backgroundColor = .clear
+        tv.drawsBackground = false
+        tv.textContainerInset = NSSize(width: 0, height: 10)
+        tv.isAutomaticQuoteSubstitutionEnabled = false
+        tv.isAutomaticDashSubstitutionEnabled = false
+        tv.isAutomaticTextReplacementEnabled = false
+        tv.isHorizontallyResizable = false
+        tv.isVerticallyResizable = true
+        tv.autoresizingMask = [.width]
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        tv.minSize = .zero
 
-    private func makeReadonlyTextView() -> NSTextView {
-        let textContainer = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
-        textContainer.widthTracksTextView = true
-        textContainer.heightTracksTextView = false
+        if editable {
+            tv.insertionPointColor = AppColors.accentGreen
+        } else {
+            tv.isEditable = false
+            tv.isSelectable = true
+            tv.textColor = AppColors.outputText
+            tv.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        }
 
-        let layoutManager = NSLayoutManager()
-        layoutManager.addTextContainer(textContainer)
-
-        let textStorage = NSTextStorage()
-        textStorage.addLayoutManager(layoutManager)
-
-        let output = EditorTextView(frame: .zero, textContainer: textContainer)
-        output.isEditable = false
-        output.isSelectable = true
-        output.backgroundColor = .clear
-        output.drawsBackground = false
-        output.textContainerInset = NSSize(width: 0, height: 10)
-        output.isAutomaticQuoteSubstitutionEnabled = false
-        output.isAutomaticDashSubstitutionEnabled = false
-        output.isAutomaticTextReplacementEnabled = false
-        output.isHorizontallyResizable = false
-        output.isVerticallyResizable = true
-        output.autoresizingMask = [.width]
-        output.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        output.minSize = NSSize(width: 0, height: 0)
-        output.textColor = NSColor(calibratedWhite: 0.90, alpha: 0.95)
-        output.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        return output
+        return tv
     }
 
     private func configureWebViewAppearance() {
@@ -657,11 +628,11 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         }
 
         textView.font = font
-        textView.textColor = NSColor(calibratedWhite: 0.92, alpha: 0.96)
+        textView.textColor = AppColors.inputText
         textView.defaultParagraphStyle = paragraphStyle
         textView.typingAttributes = [
             .font: font,
-            .foregroundColor: NSColor(calibratedWhite: 0.92, alpha: 0.96),
+            .foregroundColor: AppColors.inputText,
             .paragraphStyle: paragraphStyle,
         ]
     }
@@ -767,7 +738,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             NSCursor.pointingHand.push()
             isCursorPushed = true
         }
-        shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.22).cgColor
+        shortcutChip.layer?.borderColor = AppColors.chipBorderHover.cgColor
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -776,7 +747,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             isCursorPushed = false
         }
         if !isRecordingHotkey {
-            shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.20).cgColor
+            shortcutChip.layer?.borderColor = AppColors.chipBorderDefault.cgColor
         }
     }
 
@@ -793,7 +764,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private func startRecordingHotkey() {
         isRecordingHotkey = true
         shortcutLabel?.stringValue = "Type shortcut…"
-        shortcutChip.layer?.borderColor = Self.accentGreen.cgColor
+        shortcutChip.layer?.borderColor = AppColors.accentGreen.cgColor
         shortcutChip.layer?.borderWidth = 1.5
 
         hotkeyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -809,7 +780,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     private func stopRecordingHotkey() {
         isRecordingHotkey = false
-        shortcutChip.layer?.borderColor = NSColor(calibratedWhite: 1, alpha: 0.20).cgColor
+        shortcutChip.layer?.borderColor = AppColors.chipBorderDefault.cgColor
         shortcutChip.layer?.borderWidth = 1
 
         if let monitor = hotkeyEventMonitor {
@@ -913,10 +884,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         copyFeedbackWorkItems[buttonId]?.cancel()
 
         let docImage = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copy")?.withSymbolConfiguration(Self.copyIconConfig)
-        let defaultTint = NSColor(calibratedWhite: 1.0, alpha: 0.45)
+        let defaultTint = AppColors.iconDefault
 
         button.image = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Copied")?.withSymbolConfiguration(Self.copyIconConfig)
-        button.contentTintColor = Self.accentGreen
+        button.contentTintColor = AppColors.accentGreen
 
         let workItem = DispatchWorkItem { [weak button] in
             button?.image = docImage
@@ -1008,11 +979,11 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         let color: NSColor
         switch kind {
         case .normal:
-            color = NSColor(calibratedWhite: 0.90, alpha: 0.95)
+            color = AppColors.outputText
         case .error:
-            color = NSColor(calibratedRed: 1.0, green: 0.56, blue: 0.56, alpha: 0.97)
+            color = AppColors.errorText
         case .placeholder:
-            color = NSColor(calibratedWhite: 0.72, alpha: 0.58)
+            color = AppColors.outputPlaceholder
         }
 
         let paragraphStyle = NSMutableParagraphStyle()
