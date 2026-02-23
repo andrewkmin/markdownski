@@ -27,12 +27,32 @@ grep -rn 'URLSession\|URLRequest\|NSURLConnection\|fetch(\|XMLHttpRequest\|WebSo
 
 This should return zero results.
 
-## Unsigned builds
+## Distribution
 
-markdownski is not code-signed or notarized (no Apple Developer account). On first launch, macOS Gatekeeper will block the app. To open it:
+Releases are built automatically by [GitHub Actions](.github/workflows/release.yml) when a version tag is pushed. The pipeline:
+
+1. Runs the full test suite (`swift test`)
+2. Builds a universal binary (arm64 + x86_64) with bundle version injected from the git tag
+3. Validates the `.app` bundle (binary, plist, and resource bundle assertions)
+4. Packages it into a DMG and publishes a SHA-256 checksum alongside it
+
+All GitHub Actions are pinned by commit SHA to prevent supply chain attacks via mutable tags. The build job runs with read-only repository permissions; only the release job (which uploads artifacts) has write access.
+
+### Verifying your download
+
+Each release includes a `.sha256` checksum file. To verify:
+
+```bash
+shasum -a 256 -c markdownski.dmg.sha256
+```
+
+### Unsigned builds
+
+markdownski is not code-signed or notarized (no Apple Developer account). On first launch, macOS Gatekeeper will block the app because it cannot verify the developer identity. To open it:
 
 1. Right-click (or Control-click) the app
 2. Select **Open** from the context menu
 3. Click **Open** in the dialog
+4. If the dialog does not appear, go to **System Settings > Privacy & Security** and click **Open Anyway**
 
 This only needs to be done once. Alternatively, build from source to avoid Gatekeeper entirely.
