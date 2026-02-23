@@ -17,7 +17,7 @@ let package = Package(
             name: "MarkdownFloat",
             dependencies: ["MarkdownFloatLib"],
             path: ".",
-            exclude: ["Info.plist", "Makefile", "MarkdownFloat.app", "Lib", "Tests"],
+            exclude: ["Info.plist", "Makefile", "MarkdownFloat.app", "Lib", "Tests", "docs", "README.md", ".gitignore"],
             sources: ["Sources"],
             resources: [
                 .copy("Resources/markdown-template.html"),

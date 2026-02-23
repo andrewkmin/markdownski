@@ -1,10 +1,10 @@
-# Markdownski
+# MarkdownFloat
 
 Floating macOS overlay for fast text utilities, built with AppKit + WKWebView.
 
 ## What It Does
 
-Markdownski opens a borderless floating panel with four tool modes:
+MarkdownFloat opens a borderless floating panel with four tool modes:
 
 1. **Markdown** — editor on the left, live rendered preview on the right
 2. **Format JSON** — paste raw JSON, get prettified output (sorted keys, validation errors inline)
@@ -31,7 +31,6 @@ Markdownski opens a borderless floating panel with four tool modes:
 Run directly:
 
 ```bash
-cd MarkdownFloat
 swift build
 swift run
 ```
@@ -39,7 +38,6 @@ swift run
 Build `.app` bundle:
 
 ```bash
-cd MarkdownFloat
 make build    # builds release and assembles MarkdownFloat.app
 make run      # builds + launches
 ```
@@ -55,7 +53,6 @@ make run      # builds + launches
 ## Project Structure
 
 ```
-MarkdownFloat/
 ├── Sources/
 │   ├── main.swift                  # app entry point
 │   ├── AppDelegate.swift           # app lifecycle, wires panel + hotkey
@@ -78,7 +75,6 @@ MarkdownFloat/
 ## Running Tests
 
 ```bash
-cd MarkdownFloat
 swift test
 ```
 
