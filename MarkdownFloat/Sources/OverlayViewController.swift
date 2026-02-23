@@ -32,6 +32,144 @@ private final class ChipView: NSView {
     }
 }
 
+private final class PillTabBar: NSView {
+    var labels: [String] = [] {
+        didSet { rebuildLabels() }
+    }
+
+    var selectedIndex: Int = 0 {
+        didSet {
+            guard selectedIndex != oldValue else { return }
+            updateLabelColors()
+            animatePill()
+            onSelectionChanged?(selectedIndex)
+        }
+    }
+
+    var onSelectionChanged: ((Int) -> Void)?
+
+    override var wantsUpdateLayer: Bool { true }
+
+    private var labelFields: [NSTextField] = []
+    private let pillView = NSView()
+    private let tabInsetX: CGFloat = 3
+    private let tabInsetY: CGFloat = 3
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    private func commonInit() {
+        wantsLayer = true
+
+        pillView.wantsLayer = true
+        pillView.layer?.cornerRadius = Layout.tabPillCornerRadius
+        pillView.layer?.backgroundColor = AppColors.tabSelected.cgColor
+        pillView.layer?.borderWidth = 1
+        pillView.layer?.borderColor = AppColors.tabSelectedBorder.cgColor
+        addSubview(pillView)
+    }
+
+    override var intrinsicContentSize: NSSize {
+        guard !labelFields.isEmpty else { return NSSize(width: NSView.noIntrinsicMetric, height: Layout.tabBarHeight) }
+        let labelWidths = labelFields.map { $0.intrinsicContentSize.width }
+        let maxLabelWidth = labelWidths.max() ?? 60
+        let tabWidth = maxLabelWidth + 24  // padding per tab
+        let totalWidth = tabWidth * CGFloat(labelFields.count) + tabInsetX * 2
+        return NSSize(width: totalWidth, height: Layout.tabBarHeight)
+    }
+
+    override func updateLayer() {
+        layer?.cornerRadius = Layout.tabBarCornerRadius
+        layer?.backgroundColor = AppColors.tabBarBackground.cgColor
+    }
+
+    private func rebuildLabels() {
+        labelFields.forEach { $0.removeFromSuperview() }
+        labelFields = labels.map { text in
+            let label = NSTextField(labelWithString: text)
+            label.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+            label.alignment = .center
+            label.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(label)
+            return label
+        }
+        updateLabelColors()
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+    }
+
+    private func updateLabelColors() {
+        for (i, label) in labelFields.enumerated() {
+            label.textColor = i == selectedIndex ? AppColors.tabLabelSelected : AppColors.tabLabelNormal
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        guard !labelFields.isEmpty else { return }
+
+        let count = CGFloat(labelFields.count)
+        let availableWidth = bounds.width - tabInsetX * 2
+        let tabWidth = availableWidth / count
+        let tabHeight = bounds.height - tabInsetY * 2
+
+        for (i, label) in labelFields.enumerated() {
+            let x = tabInsetX + CGFloat(i) * tabWidth
+            let intrinsicHeight = label.intrinsicContentSize.height
+            let labelY = tabInsetY + (tabHeight - intrinsicHeight) / 2
+            label.frame = NSRect(x: x, y: labelY, width: tabWidth, height: intrinsicHeight)
+        }
+
+        // Position pill without animation during layout
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        positionPill()
+        CATransaction.commit()
+    }
+
+    private func pillRect(for index: Int) -> NSRect {
+        let count = CGFloat(labelFields.count)
+        let availableWidth = bounds.width - tabInsetX * 2
+        let tabWidth = availableWidth / count
+        let tabHeight = bounds.height - tabInsetY * 2
+        let x = tabInsetX + CGFloat(index) * tabWidth
+        return NSRect(x: x, y: tabInsetY, width: tabWidth, height: tabHeight)
+    }
+
+    private func positionPill() {
+        guard selectedIndex < labelFields.count else { return }
+        pillView.frame = pillRect(for: selectedIndex)
+    }
+
+    private func animatePill() {
+        guard selectedIndex < labelFields.count else { return }
+        let targetFrame = pillRect(for: selectedIndex)
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.allowsImplicitAnimation = true
+            self.pillView.frame = targetFrame
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+        for i in labelFields.indices {
+            if pillRect(for: i).contains(location) {
+                selectedIndex = i
+                return
+            }
+        }
+    }
+}
+
 private final class EditorTextView: NSTextView {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -66,7 +204,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private var titleLabel: NSTextField!
     private var subtitleLabel: NSTextField!
     private var shortcutChip: ChipView!
-    private var toolModeControl: NSSegmentedControl!
+    private var toolModeControl: PillTabBar!
     private var clearAllButton: NSButton!
     private var autoPasteLabel: NSTextField!
     private var autoPasteToggle: NSSwitch!
@@ -130,7 +268,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         ])
 
         setupHeader()
-        currentToolMode = ToolMode(rawValue: toolModeControl.selectedSegment) ?? .markdown
+        currentToolMode = ToolMode(rawValue: toolModeControl.selectedIndex) ?? .markdown
         setupInputCard()
         setupPreviewCard()
         setupConstraints()
@@ -179,18 +317,18 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
         toolModeControl = makeToolModeControl()
         let savedToolModeRaw = UserDefaults.standard.integer(forKey: Self.toolModeDefaultsKey)
-        toolModeControl.selectedSegment = ToolMode(rawValue: savedToolModeRaw)?.rawValue ?? ToolMode.markdown.rawValue
+        toolModeControl.selectedIndex = ToolMode(rawValue: savedToolModeRaw)?.rawValue ?? ToolMode.markdown.rawValue
 
-        autoPasteLabel = NSTextField(labelWithString: "Paste from clipboard")
+        autoPasteLabel = NSTextField(labelWithString: "Auto-paste")
         autoPasteLabel.translatesAutoresizingMaskIntoConstraints = false
-        autoPasteLabel.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+        autoPasteLabel.font = NSFont.systemFont(ofSize: 11, weight: .medium)
         autoPasteLabel.textColor = AppColors.secondaryLabel
-        autoPasteLabel.lineBreakMode = .byTruncatingTail
 
         autoPasteToggle = NSSwitch()
         autoPasteToggle.translatesAutoresizingMaskIntoConstraints = false
         autoPasteToggle.controlSize = .small
         autoPasteToggle.state = isAutoPasteEnabled ? .on : .off
+        autoPasteToggle.toolTip = "Auto-paste from clipboard"
         autoPasteToggle.target = self
         autoPasteToggle.action = #selector(autoPasteToggleChanged(_:))
 
@@ -318,43 +456,46 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     }
 
     private func setupConstraints() {
-        let contentLeading = Layout.outerPadding + 1
+        let edgeInset = Layout.outerPadding
 
         NSLayoutConstraint.activate([
             view.widthAnchor.constraint(greaterThanOrEqualToConstant: Layout.minimumPanelWidth),
 
-            // Top bar: close button (left) and shortcut chip (right)
-            closeButton.topAnchor.constraint(equalTo: view.topAnchor, constant: 14),
-            closeButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: contentLeading),
+            // Row 1: close button (left) and shortcut chip (right) — equidistant from edges
+            closeButton.topAnchor.constraint(equalTo: view.topAnchor, constant: edgeInset),
+            closeButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: edgeInset),
             closeButton.widthAnchor.constraint(equalToConstant: 15),
             closeButton.heightAnchor.constraint(equalToConstant: 15),
 
-            shortcutChip.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
-            shortcutChip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
+            shortcutChip.topAnchor.constraint(equalTo: view.topAnchor, constant: edgeInset - 4),
+            shortcutChip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -edgeInset),
 
-            // Title row: below the top bar
+            // Row 2: title
             titleLabel.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 10),
-            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: contentLeading),
+            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: edgeInset),
 
+            // Row 3: subtitle (clean text-only)
             subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            subtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -edgeInset),
 
-            autoPasteToggle.centerYAnchor.constraint(equalTo: subtitleLabel.centerYAnchor),
-            autoPasteToggle.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
-
-            autoPasteLabel.centerYAnchor.constraint(equalTo: autoPasteToggle.centerYAnchor),
-            autoPasteLabel.trailingAnchor.constraint(equalTo: autoPasteToggle.leadingAnchor, constant: -8),
-
-            splitModeControl.centerYAnchor.constraint(equalTo: subtitleLabel.centerYAnchor),
-            splitModeControl.trailingAnchor.constraint(equalTo: autoPasteLabel.leadingAnchor, constant: -12),
-            splitModeControl.leadingAnchor.constraint(greaterThanOrEqualTo: subtitleLabel.trailingAnchor, constant: 16),
-
+            // Row 4: pill tab bar + split mode + paste label + toggle + clear all
             toolModeControl.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 12),
             toolModeControl.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            toolModeControl.heightAnchor.constraint(equalToConstant: Layout.tabBarHeight),
+
+            splitModeControl.centerYAnchor.constraint(equalTo: toolModeControl.centerYAnchor),
+            splitModeControl.leadingAnchor.constraint(greaterThanOrEqualTo: toolModeControl.trailingAnchor, constant: 12),
+
+            autoPasteLabel.centerYAnchor.constraint(equalTo: toolModeControl.centerYAnchor),
+            autoPasteLabel.leadingAnchor.constraint(equalTo: splitModeControl.trailingAnchor, constant: 12),
+
+            autoPasteToggle.centerYAnchor.constraint(equalTo: toolModeControl.centerYAnchor),
+            autoPasteToggle.leadingAnchor.constraint(equalTo: autoPasteLabel.trailingAnchor, constant: 6),
 
             clearAllButton.centerYAnchor.constraint(equalTo: toolModeControl.centerYAnchor),
-            clearAllButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
-            clearAllButton.leadingAnchor.constraint(greaterThanOrEqualTo: toolModeControl.trailingAnchor, constant: 12),
+            clearAllButton.leadingAnchor.constraint(equalTo: autoPasteToggle.trailingAnchor, constant: 12),
+            clearAllButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -edgeInset),
         ])
 
         applySplitLayout(mode: selectedSplitMode)
@@ -493,16 +634,14 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         return button
     }
 
-    private func makeToolModeControl() -> NSSegmentedControl {
-        let control = NSSegmentedControl(labels: ["Markdown", "Format JSON", "Parse JSON", "Stringify JSON"], trackingMode: .selectOne, target: self, action: #selector(toolModeChanged(_:)))
-        control.translatesAutoresizingMaskIntoConstraints = false
-        control.controlSize = .small
-        control.segmentStyle = .rounded
-        control.setWidth(96, forSegment: 0)
-        control.setWidth(100, forSegment: 1)
-        control.setWidth(96, forSegment: 2)
-        control.setWidth(108, forSegment: 3)
-        return control
+    private func makeToolModeControl() -> PillTabBar {
+        let bar = PillTabBar()
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        bar.labels = ["Markdown", "Format JSON", "Parse JSON", "Stringify"]
+        bar.onSelectionChanged = { [weak self] index in
+            self?.pillTabChanged(index)
+        }
+        return bar
     }
 
     private func makeSplitModeControl() -> NSSegmentedControl {
@@ -731,11 +870,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         applySplitLayout(mode: mode)
     }
 
-    @objc
-    private func toolModeChanged(_ sender: NSSegmentedControl) {
+    private func pillTabChanged(_ index: Int) {
         modeTextStorage[currentToolMode] = textView.string
 
-        let mode = ToolMode(rawValue: sender.selectedSegment) ?? .markdown
+        let mode = ToolMode(rawValue: index) ?? .markdown
         currentToolMode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: Self.toolModeDefaultsKey)
 
