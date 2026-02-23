@@ -29,7 +29,7 @@ class OverlayPanel: NSPanel {
         self.hidesOnDeactivate = false
         self.isMovableByWindowBackground = true
         self.appearance = NSAppearance(named: .darkAqua)
-        self.minSize = NSSize(width: 600, height: 420)
+        self.minSize = NSSize(width: Layout.minimumPanelWidth, height: Layout.minimumPanelHeight)
 
         let initialSize = NSSize(width: panelWidth, height: panelHeight)
         self.setContentSize(initialSize)
@@ -40,11 +40,11 @@ class OverlayPanel: NSPanel {
         visualEffectView.state = .active
         visualEffectView.blendingMode = .behindWindow
         visualEffectView.wantsLayer = true
-        visualEffectView.layer?.cornerRadius = 22
+        visualEffectView.layer?.cornerRadius = Layout.panelCornerRadius
         visualEffectView.layer?.masksToBounds = true
         visualEffectView.layer?.borderWidth = 1
-        visualEffectView.layer?.borderColor = NSColor(calibratedWhite: 1.0, alpha: 0.07).cgColor
-        visualEffectView.layer?.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 0.55).cgColor
+        visualEffectView.layer?.borderColor = AppColors.panelBorder.cgColor
+        visualEffectView.layer?.backgroundColor = AppColors.panelBackground.cgColor
         visualEffectView.autoresizingMask = [.width, .height]
         self.contentView = visualEffectView
 
