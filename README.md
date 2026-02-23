@@ -2,6 +2,20 @@
 
 Floating macOS overlay for fast text utilities, built with AppKit + WKWebView.
 
+## Install
+
+**Download:** Grab the latest `.dmg` from [Releases](https://github.com/andrewkmin/markdownski/releases/latest), open it, and drag `markdownski.app` to Applications.
+
+> **Note:** markdownski is not code-signed. On first launch, macOS will block it. Right-click the app, select **Open**, then click **Open** in the dialog. This only needs to be done once.
+
+**Build from source** (requires macOS 13+, Swift 5.9+):
+
+```bash
+git clone https://github.com/andrewkmin/markdownski.git
+cd markdownski
+make build && open markdownski.app
+```
+
 ## What It Does
 
 markdownski opens a borderless floating panel with four tool modes:
@@ -23,24 +37,6 @@ markdownski opens a borderless floating panel with four tool modes:
 - Markdown preview styled to match GitHub dark mode
 - Animated pill tab bar for switching tool modes
 - Copy buttons on both editor and output panes
-
-## Quick Start
-
-**Requirements:** macOS 13+, Swift 5.9+ / Xcode Command Line Tools
-
-Run directly:
-
-```bash
-swift build
-swift run
-```
-
-Build `.app` bundle:
-
-```bash
-make build    # builds release and assembles markdownski.app
-make run      # builds + launches
-```
 
 ## Usage
 
@@ -77,6 +73,10 @@ make run      # builds + launches
 ```bash
 swift test
 ```
+
+## Security
+
+This app makes **zero network connections** and has **no external dependencies**. See [SECURITY.md](SECURITY.md) for a full audit.
 
 ## Notes
 
