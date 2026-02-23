@@ -4,9 +4,11 @@ Floating macOS overlay for fast text utilities, built with AppKit + WKWebView.
 
 ## Install
 
-**Download:** Grab the latest `.dmg` from [Releases](https://github.com/andrewkmin/markdownski/releases/latest), open it, and drag `markdownski.app` to Applications.
+**Download:** Grab the latest `.dmg` from [Releases](https://github.com/andrewkmin/markdownski/releases/latest) (requires **macOS 13+**), open it, and drag `markdownski.app` to Applications.
 
-> **Note:** markdownski is not code-signed. On first launch, macOS will block it. Right-click the app, select **Open**, then click **Open** in the dialog. This only needs to be done once.
+> **Note:** markdownski is not code-signed (no Apple Developer account). On first launch, macOS Gatekeeper will block it because it cannot verify the developer identity. This is a safety feature — you should normally *not* bypass it for software you do not trust. If you trust this source, right-click the app, select **Open**, then click **Open** in the dialog. If the dialog does not appear, go to **System Settings > Privacy & Security** and click **Open Anyway**. This only needs to be done once.
+>
+> For maximum assurance, build from source or review the [security audit](SECURITY.md) before running the pre-built binary. Each release also includes a `.sha256` checksum file you can verify with `shasum -a 256 -c markdownski.dmg.sha256`.
 
 **Build from source** (requires macOS 13+, Swift 5.9+):
 
