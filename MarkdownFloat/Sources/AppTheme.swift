@@ -18,6 +18,10 @@ enum AppColors {
     static let closeIcon = NSColor(calibratedWhite: 1.0, alpha: 0.70)
     static let clearAllText = NSColor(calibratedWhite: 0.82, alpha: 0.65)
 
+    // Tab bar
+    static let tabLabelSelected = NSColor(calibratedWhite: 1.0, alpha: 0.95)
+    static let tabLabelNormal = NSColor(calibratedWhite: 1.0, alpha: 0.55)
+
     // Borders & Backgrounds
     static let chipBorder = NSColor(calibratedWhite: 1, alpha: 0.35)
     static let chipBorderDefault = NSColor(calibratedWhite: 1, alpha: 0.28)
@@ -28,6 +32,9 @@ enum AppColors {
     static let containerBackground = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 0.48)
     static let panelBackground = NSColor(calibratedRed: 0.06, green: 0.07, blue: 0.09, alpha: 0.55)
     static let cardBackground = NSColor(calibratedRed: 0.08, green: 0.09, blue: 0.12, alpha: 0.42)
+    static let tabBarBackground = NSColor(calibratedWhite: 1.0, alpha: 0.06)
+    static let tabSelected = NSColor(calibratedWhite: 1.0, alpha: 0.14)
+    static let tabSelectedBorder = NSColor(calibratedWhite: 1.0, alpha: 0.18)
 }
 
 enum Layout {
@@ -39,4 +46,7 @@ enum Layout {
     static let minimumPanelHeight: CGFloat = 420
     static let cardInnerPadding: CGFloat = 14
     static let cardTitleTopPadding: CGFloat = 12
+    static let tabBarCornerRadius: CGFloat = 10
+    static let tabBarHeight: CGFloat = 28
+    static let tabPillCornerRadius: CGFloat = 8
 }
