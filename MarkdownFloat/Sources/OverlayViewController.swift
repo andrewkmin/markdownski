@@ -408,10 +408,11 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         let chip = NSView()
         chip.translatesAutoresizingMaskIntoConstraints = false
         chip.wantsLayer = true
+        chip.layer = CALayer()
         chip.layer?.cornerRadius = 999
         chip.layer?.masksToBounds = true
         chip.layer?.borderWidth = 1
-        chip.layer?.borderColor = AppColors.chipBorder.cgColor
+        chip.layer?.borderColor = AppColors.chipBorderDefault.cgColor
         chip.layer?.backgroundColor = AppColors.chipBackground.cgColor
 
         let label = NSTextField(labelWithString: text)
