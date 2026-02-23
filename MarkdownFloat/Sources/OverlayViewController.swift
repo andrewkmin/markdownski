@@ -13,21 +13,6 @@ private enum ToolMode: Int {
     case jsonStringify = 3
 }
 
-private enum JSONToolError: LocalizedError {
-    case expectedJSONStringLiteral(String)
-    case embeddedJSONInvalid(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .expectedJSONStringLiteral(let reason):
-            let summary = "Input must be a JSON string literal, for example: \"{\\\"name\\\":\\\"Ada\\\"}\""
-            return reason.isEmpty ? summary : "\(summary)\n\(reason)"
-        case .embeddedJSONInvalid(let reason):
-            return "String value does not contain valid JSON.\n\(reason)"
-        }
-    }
-}
-
 private final class EditorTextView: NSTextView {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -983,13 +968,9 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             setOutputText(outputPlaceholderText(), kind: .placeholder)
             return
         }
-
-        do {
-            let value = try parseJSONValue(from: raw)
-            let formatted = try encodeJSON(value: value, pretty: true)
-            setOutputText(formatted, kind: .normal)
-        } catch {
-            setOutputText("Invalid JSON.\n\(error.localizedDescription)", kind: .error)
+        switch JSONProcessor.formatJSON(raw) {
+        case .success(let text): setOutputText(text, kind: .normal)
+        case .error(let msg): setOutputText(msg, kind: .error)
         }
     }
 
@@ -999,19 +980,9 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             setOutputText(outputPlaceholderText(), kind: .placeholder)
             return
         }
-
-        do {
-            let innerJSONString = try decodeJSONStringLiteral(from: raw)
-            let value: Any
-            do {
-                value = try parseJSONValue(from: innerJSONString)
-            } catch {
-                throw JSONToolError.embeddedJSONInvalid(error.localizedDescription)
-            }
-            let formatted = try encodeJSON(value: value, pretty: true)
-            setOutputText(formatted, kind: .normal)
-        } catch {
-            setOutputText("\(error.localizedDescription)", kind: .error)
+        switch JSONProcessor.parseJSONString(raw) {
+        case .success(let text): setOutputText(text, kind: .normal)
+        case .error(let msg): setOutputText(msg, kind: .error)
         }
     }
 
@@ -1021,38 +992,9 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             setOutputText(outputPlaceholderText(), kind: .placeholder)
             return
         }
-
-        do {
-            let value = try parseJSONValue(from: raw)
-            let canonicalJSON = try encodeJSON(value: value, pretty: false)
-            let encoded = try JSONEncoder().encode(canonicalJSON)
-            let stringified = String(decoding: encoded, as: UTF8.self)
-            setOutputText(stringified, kind: .normal)
-        } catch {
-            setOutputText("Invalid JSON value.\n\(error.localizedDescription)", kind: .error)
-        }
-    }
-
-    private func parseJSONValue(from text: String) throws -> Any {
-        let data = Data(text.utf8)
-        return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-    }
-
-    private func encodeJSON(value: Any, pretty: Bool) throws -> String {
-        var options: JSONSerialization.WritingOptions = [.sortedKeys, .fragmentsAllowed]
-        if pretty {
-            options.insert(.prettyPrinted)
-        }
-        let data = try JSONSerialization.data(withJSONObject: value, options: options)
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    private func decodeJSONStringLiteral(from text: String) throws -> String {
-        let data = Data(text.utf8)
-        do {
-            return try JSONDecoder().decode(String.self, from: data)
-        } catch {
-            throw JSONToolError.expectedJSONStringLiteral(error.localizedDescription)
+        switch JSONProcessor.stringifyJSON(raw) {
+        case .success(let text): setOutputText(text, kind: .normal)
+        case .error(let msg): setOutputText(msg, kind: .error)
         }
     }
 
