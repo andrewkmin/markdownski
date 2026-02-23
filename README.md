@@ -2,6 +2,8 @@
 
 Floating macOS overlay for fast text utilities, built with AppKit + WKWebView.
 
+https://github.com/user-attachments/assets/107953cf-a916-4a71-aa72-1c751df47fdb
+
 ## Install
 
 **Download:** Grab the latest `.dmg` from [Releases](https://github.com/andrewkmin/markdownski/releases/latest) (requires **macOS 13+**), open it, and drag `markdownski.app` to Applications.
