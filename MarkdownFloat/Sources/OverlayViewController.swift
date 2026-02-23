@@ -13,6 +13,25 @@ private enum ToolMode: Int {
     case jsonStringify = 3
 }
 
+private final class ChipView: NSView {
+    var chipBackgroundColor: NSColor = AppColors.chipBackground {
+        didSet { needsDisplay = true }
+    }
+    var chipBorderColor: NSColor = AppColors.chipBorderDefault {
+        didSet { needsDisplay = true }
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        layer?.cornerRadius = min(bounds.height, bounds.width) / 2
+        layer?.masksToBounds = true
+        layer?.borderWidth = 1
+        layer?.borderColor = chipBorderColor.cgColor
+        layer?.backgroundColor = chipBackgroundColor.cgColor
+    }
+}
+
 private final class EditorTextView: NSTextView {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -46,7 +65,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     private var titleLabel: NSTextField!
     private var subtitleLabel: NSTextField!
-    private var shortcutChip: NSView!
+    private var shortcutChip: ChipView!
     private var toolModeControl: NSSegmentedControl!
     private var clearAllButton: NSButton!
     private var autoPasteLabel: NSTextField!
@@ -299,23 +318,26 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     }
 
     private func setupConstraints() {
+        let contentLeading = Layout.outerPadding + 1
+
         NSLayoutConstraint.activate([
             view.widthAnchor.constraint(greaterThanOrEqualToConstant: Layout.minimumPanelWidth),
 
-            closeButton.topAnchor.constraint(equalTo: view.topAnchor, constant: Layout.outerPadding + 2),
-            closeButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Layout.outerPadding + 1),
+            // Top bar: close button (left) and shortcut chip (right)
+            closeButton.topAnchor.constraint(equalTo: view.topAnchor, constant: 14),
+            closeButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: contentLeading),
             closeButton.widthAnchor.constraint(equalToConstant: 15),
             closeButton.heightAnchor.constraint(equalToConstant: 15),
 
-            titleLabel.leadingAnchor.constraint(equalTo: closeButton.trailingAnchor, constant: 10),
-            titleLabel.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            shortcutChip.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            shortcutChip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
+
+            // Title row: below the top bar
+            titleLabel.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 10),
+            titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: contentLeading),
 
             subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-
-            shortcutChip.centerYAnchor.constraint(equalTo: titleLabel.centerYAnchor),
-            shortcutChip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
-            shortcutChip.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 14),
 
             autoPasteToggle.centerYAnchor.constraint(equalTo: subtitleLabel.centerYAnchor),
             autoPasteToggle.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Layout.outerPadding),
@@ -404,16 +426,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         return label
     }
 
-    private func makeChip(text: String) -> NSView {
-        let chip = NSView()
+    private func makeChip(text: String) -> ChipView {
+        let chip = ChipView()
         chip.translatesAutoresizingMaskIntoConstraints = false
         chip.wantsLayer = true
-        chip.layer = CALayer()
-        chip.layer?.cornerRadius = 999
-        chip.layer?.masksToBounds = true
-        chip.layer?.borderWidth = 1
-        chip.layer?.borderColor = AppColors.chipBorderDefault.cgColor
-        chip.layer?.backgroundColor = AppColors.chipBackground.cgColor
 
         let label = NSTextField(labelWithString: text)
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -739,7 +755,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             NSCursor.pointingHand.push()
             isCursorPushed = true
         }
-        shortcutChip.layer?.borderColor = AppColors.chipBorderHover.cgColor
+        shortcutChip.chipBorderColor = AppColors.chipBorderHover
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -748,7 +764,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             isCursorPushed = false
         }
         if !isRecordingHotkey {
-            shortcutChip.layer?.borderColor = AppColors.chipBorderDefault.cgColor
+            shortcutChip.chipBorderColor = AppColors.chipBorderDefault
         }
     }
 
@@ -765,8 +781,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private func startRecordingHotkey() {
         isRecordingHotkey = true
         shortcutLabel?.stringValue = "Type shortcut…"
-        shortcutChip.layer?.borderColor = AppColors.accentGreen.cgColor
-        shortcutChip.layer?.borderWidth = 1.5
+        shortcutChip.chipBorderColor = AppColors.accentGreen
 
         hotkeyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             // Forward Cmd+Q to the system so the user can always quit
@@ -781,8 +796,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     private func stopRecordingHotkey() {
         isRecordingHotkey = false
-        shortcutChip.layer?.borderColor = AppColors.chipBorderDefault.cgColor
-        shortcutChip.layer?.borderWidth = 1
+        shortcutChip.chipBorderColor = AppColors.chipBorderDefault
 
         if let monitor = hotkeyEventMonitor {
             NSEvent.removeMonitor(monitor)
