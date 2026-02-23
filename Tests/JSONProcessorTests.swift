@@ -1,5 +1,5 @@
 import XCTest
-@testable import MarkdownFloatLib
+@testable import markdownskiLib
 
 final class JSONProcessorFormatTests: XCTestCase {
 

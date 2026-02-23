@@ -1,1 +1,1 @@
-@_exported import MarkdownFloatLib
+@_exported import markdownskiLib

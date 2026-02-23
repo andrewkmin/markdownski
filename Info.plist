@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>MarkdownFloat</string>
+    <string>markdownski</string>
     <key>CFBundleIdentifier</key>
-    <string>com.andrewkmin.MarkdownFloat</string>
+    <string>com.andrewkmin.markdownski</string>
     <key>CFBundleVersion</key>
     <string>1.0</string>
     <key>CFBundleShortVersionString</key>
@@ -13,7 +13,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>MarkdownFloat</string>
+    <string>markdownski</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>

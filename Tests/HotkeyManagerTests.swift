@@ -1,7 +1,7 @@
 import XCTest
 import Carbon
 import AppKit
-@testable import MarkdownFloatLib
+@testable import markdownskiLib
 
 final class HotkeyManagerKeyNameTests: XCTestCase {
 

@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "MarkdownFloat",
+    name: "markdownski",
     platforms: [.macOS(.v13)],
     targets: [
         .target(
-            name: "MarkdownFloatLib",
+            name: "markdownskiLib",
             path: "Lib",
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -14,10 +14,10 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "MarkdownFloat",
-            dependencies: ["MarkdownFloatLib"],
+            name: "markdownski",
+            dependencies: ["markdownskiLib"],
             path: ".",
-            exclude: ["Info.plist", "Makefile", "MarkdownFloat.app", "Lib", "Tests", "docs", "README.md", ".gitignore"],
+            exclude: ["Info.plist", "Makefile", "markdownski.app", "Lib", "Tests", "docs", "README.md", "SECURITY.md", ".gitignore"],
             sources: ["Sources"],
             resources: [
                 .copy("Resources/markdown-template.html"),
@@ -30,8 +30,8 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "MarkdownFloatTests",
-            dependencies: ["MarkdownFloatLib"],
+            name: "markdownskiTests",
+            dependencies: ["markdownskiLib"],
             path: "Tests"
         )
     ]

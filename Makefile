@@ -2,16 +2,16 @@
 
 build:
 	swift build -c release
-	mkdir -p MarkdownFloat.app/Contents/MacOS
-	mkdir -p MarkdownFloat.app/Contents/Resources
-	cp .build/release/MarkdownFloat MarkdownFloat.app/Contents/MacOS/
-	cp Info.plist MarkdownFloat.app/Contents/
-	cp -R .build/release/MarkdownFloat_MarkdownFloat.bundle MarkdownFloat.app/Contents/Resources/
-	@echo "Built MarkdownFloat.app"
+	mkdir -p markdownski.app/Contents/MacOS
+	mkdir -p markdownski.app/Contents/Resources
+	cp .build/release/markdownski markdownski.app/Contents/MacOS/
+	cp Info.plist markdownski.app/Contents/
+	cp -R .build/release/markdownski_markdownski.bundle markdownski.app/Contents/Resources/
+	@echo "Built markdownski.app"
 
 run: build
-	open MarkdownFloat.app
+	open markdownski.app
 
 clean:
 	swift package clean
-	rm -rf MarkdownFloat.app
+	rm -rf markdownski.app
