@@ -180,15 +180,34 @@ private final class EditorTextView: NSTextView {
             case "v": paste(nil); return true
             case "c": copy(nil); return true
             case "x": cut(nil); return true
+            case "f":
+                let item = NSMenuItem()
+                item.tag = NSTextFinder.Action.showFindInterface.rawValue
+                performFindPanelAction(item)
+                return true
+            case "g":
+                let item = NSMenuItem()
+                item.tag = NSTextFinder.Action.nextMatch.rawValue
+                performFindPanelAction(item)
+                return true
             case "z":
                 guard let um = undoManager, um.canUndo else { return super.performKeyEquivalent(with: event) }
                 um.undo(); return true
             default: break
             }
         }
-        if flags == [.command, .shift], key == "z" {
-            guard let um = undoManager, um.canRedo else { return super.performKeyEquivalent(with: event) }
-            um.redo(); return true
+        if flags == [.command, .shift] {
+            switch key {
+            case "g":
+                let item = NSMenuItem()
+                item.tag = NSTextFinder.Action.previousMatch.rawValue
+                performFindPanelAction(item)
+                return true
+            case "z":
+                guard let um = undoManager, um.canRedo else { return super.performKeyEquivalent(with: event) }
+                um.redo(); return true
+            default: break
+            }
         }
         return super.performKeyEquivalent(with: event)
     }
