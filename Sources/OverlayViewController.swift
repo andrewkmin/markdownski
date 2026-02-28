@@ -696,6 +696,8 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         tv.autoresizingMask = [.width]
         tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         tv.minSize = .zero
+        tv.usesFindBar = true
+        tv.isIncrementalSearchingEnabled = true
 
         if editable {
             tv.insertionPointColor = AppColors.accentGreen
