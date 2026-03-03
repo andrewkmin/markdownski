@@ -14,23 +14,34 @@ private enum ToolMode: Int {
 }
 
 private final class StyledSearchFieldCell: NSSearchFieldCell {
+    private let textHeight: CGFloat = 12
+
     override func drawingRect(forBounds rect: NSRect) -> NSRect {
         // Adjust the text rect to account for borderless styling
         var newRect = super.drawingRect(forBounds: rect)
         // Vertically center the text by adjusting for the removed border insets
-        let heightDelta = newRect.height - 14  // Approximate line height for small control
+        let heightDelta = newRect.height - textHeight
         newRect.origin.y += heightDelta / 2 - 1
-        newRect.size.height = 14
+        newRect.size.height = textHeight
+        return newRect
+    }
+
+    private func editorRect(forBounds rect: NSRect) -> NSRect {
+        // Field editor needs to sit slightly lower than placeholder text
+        var newRect = super.drawingRect(forBounds: rect)
+        let heightDelta = newRect.height - textHeight
+        newRect.origin.y += heightDelta / 2 + 1
+        newRect.size.height = textHeight
         return newRect
     }
 
     override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
-        let adjustedRect = drawingRect(forBounds: rect)
+        let adjustedRect = editorRect(forBounds: rect)
         super.select(withFrame: adjustedRect, in: controlView, editor: textObj, delegate: delegate, start: selStart, length: selLength)
     }
 
     override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, event: NSEvent?) {
-        let adjustedRect = drawingRect(forBounds: rect)
+        let adjustedRect = editorRect(forBounds: rect)
         super.edit(withFrame: adjustedRect, in: controlView, editor: textObj, delegate: delegate, event: event)
     }
 }
@@ -732,6 +743,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         field.translatesAutoresizingMaskIntoConstraints = false
         field.placeholderString = "Search"
         field.controlSize = .small
+        field.font = NSFont.systemFont(ofSize: 11)
         field.appearance = NSAppearance(named: .darkAqua)
         field.textColor = AppColors.inputText
         field.target = self
