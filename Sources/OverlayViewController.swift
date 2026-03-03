@@ -13,6 +13,77 @@ private enum ToolMode: Int {
     case jsonStringify = 3
 }
 
+private final class StyledSearchFieldCell: NSSearchFieldCell {
+    override func drawingRect(forBounds rect: NSRect) -> NSRect {
+        // Adjust the text rect to account for borderless styling
+        var newRect = super.drawingRect(forBounds: rect)
+        // Vertically center the text by adjusting for the removed border insets
+        let heightDelta = newRect.height - 14  // Approximate line height for small control
+        newRect.origin.y += heightDelta / 2 - 1
+        newRect.size.height = 14
+        return newRect
+    }
+
+    override func select(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, start selStart: Int, length selLength: Int) {
+        let adjustedRect = drawingRect(forBounds: rect)
+        super.select(withFrame: adjustedRect, in: controlView, editor: textObj, delegate: delegate, start: selStart, length: selLength)
+    }
+
+    override func edit(withFrame rect: NSRect, in controlView: NSView, editor textObj: NSText, delegate: Any?, event: NSEvent?) {
+        let adjustedRect = drawingRect(forBounds: rect)
+        super.edit(withFrame: adjustedRect, in: controlView, editor: textObj, delegate: delegate, event: event)
+    }
+}
+
+private final class StyledSearchField: NSSearchField {
+    override class var cellClass: AnyClass? {
+        get { StyledSearchFieldCell.self }
+        set { }
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        commonInit()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        commonInit()
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    private var isActive: Bool {
+        guard let window else { return false }
+        return window.firstResponder === currentEditor()
+    }
+
+    private func commonInit() {
+        wantsLayer = true
+        isBordered = false
+        drawsBackground = false
+        focusRingType = .none
+    }
+
+    override func updateLayer() {
+        layer?.cornerRadius = 6
+        layer?.masksToBounds = true
+        layer?.borderWidth = 1
+        layer?.borderColor = (isActive ? AppColors.chipBorderHover : AppColors.chipBorderDefault).cgColor
+        layer?.backgroundColor = AppColors.chipBackground.cgColor
+    }
+
+    override func textDidBeginEditing(_ notification: Notification) {
+        super.textDidBeginEditing(notification)
+        needsDisplay = true
+    }
+
+    override func textDidEndEditing(_ notification: Notification) {
+        super.textDidEndEditing(notification)
+        needsDisplay = true
+    }
+}
+
 private final class ChipView: NSView {
     var chipBackgroundColor: NSColor = AppColors.chipBackground {
         didSet { needsDisplay = true }
@@ -180,34 +251,15 @@ private final class EditorTextView: NSTextView {
             case "v": paste(nil); return true
             case "c": copy(nil); return true
             case "x": cut(nil); return true
-            case "f":
-                let item = NSMenuItem()
-                item.tag = NSTextFinder.Action.showFindInterface.rawValue
-                performFindPanelAction(item)
-                return true
-            case "g":
-                let item = NSMenuItem()
-                item.tag = NSTextFinder.Action.nextMatch.rawValue
-                performFindPanelAction(item)
-                return true
             case "z":
                 guard let um = undoManager, um.canUndo else { return super.performKeyEquivalent(with: event) }
                 um.undo(); return true
             default: break
             }
         }
-        if flags == [.command, .shift] {
-            switch key {
-            case "g":
-                let item = NSMenuItem()
-                item.tag = NSTextFinder.Action.previousMatch.rawValue
-                performFindPanelAction(item)
-                return true
-            case "z":
-                guard let um = undoManager, um.canRedo else { return super.performKeyEquivalent(with: event) }
-                um.redo(); return true
-            default: break
-            }
+        if flags == [.command, .shift], key == "z" {
+            guard let um = undoManager, um.canRedo else { return super.performKeyEquivalent(with: event) }
+            um.redo(); return true
         }
         return super.performKeyEquivalent(with: event)
     }
@@ -244,12 +296,16 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     private var copyInputButton: NSButton!
     private var copyOutputButton: NSButton!
 
+    private var searchField: NSSearchField!
+    private var matchCountLabel: NSTextField!
+
     private var splitLayoutConstraints: [NSLayoutConstraint] = []
 
     private var modeTextStorage: [ToolMode: String] = [:]
     private var currentToolMode: ToolMode = .markdown
     private var copyFeedbackWorkItems: [ObjectIdentifier: DispatchWorkItem] = [:]
     private var renderTimer: Timer?
+    private var searchTimer: Timer?
     private var isTemplateLoaded = false
     private var pendingRender = false
 
@@ -359,6 +415,13 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
         closeButton = makeCloseButton()
 
+        searchField = makeSearchField()
+        matchCountLabel = NSTextField(labelWithString: "")
+        matchCountLabel.translatesAutoresizingMaskIntoConstraints = false
+        matchCountLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
+        matchCountLabel.textColor = AppColors.secondaryLabel
+        matchCountLabel.isHidden = true
+
         view.addSubview(titleLabel)
         view.addSubview(subtitleLabel)
         view.addSubview(shortcutChip)
@@ -368,6 +431,8 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         view.addSubview(autoPasteToggle)
         view.addSubview(splitModeControl)
         view.addSubview(closeButton)
+        view.addSubview(searchField)
+        view.addSubview(matchCountLabel)
     }
 
     private func setupInputCard() {
@@ -489,11 +554,20 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             shortcutChip.topAnchor.constraint(equalTo: view.topAnchor, constant: edgeInset - 4),
             shortcutChip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -edgeInset),
 
+            // Row 1 (cont.): search field in top utility bar, left of shortcut chip
+            searchField.centerYAnchor.constraint(equalTo: shortcutChip.centerYAnchor),
+            searchField.trailingAnchor.constraint(equalTo: shortcutChip.leadingAnchor, constant: -8),
+            searchField.widthAnchor.constraint(equalToConstant: 140),
+            searchField.heightAnchor.constraint(equalToConstant: 22),
+
+            matchCountLabel.centerYAnchor.constraint(equalTo: searchField.centerYAnchor),
+            matchCountLabel.trailingAnchor.constraint(equalTo: searchField.leadingAnchor, constant: -6),
+
             // Row 2: title
             titleLabel.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 10),
             titleLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: edgeInset),
 
-            // Row 3: subtitle (clean text-only)
+            // Row 3: subtitle
             subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
             subtitleLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -edgeInset),
@@ -653,6 +727,19 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         return button
     }
 
+    private func makeSearchField() -> NSSearchField {
+        let field = StyledSearchField()
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.placeholderString = "Search"
+        field.controlSize = .small
+        field.appearance = NSAppearance(named: .darkAqua)
+        field.textColor = AppColors.inputText
+        field.target = self
+        field.action = #selector(searchFieldChanged(_:))
+        field.sendsSearchStringImmediately = true
+        return field
+    }
+
     private func makeToolModeControl() -> PillTabBar {
         let bar = PillTabBar()
         bar.translatesAutoresizingMaskIntoConstraints = false
@@ -715,8 +802,6 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
         tv.autoresizingMask = [.width]
         tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         tv.minSize = .zero
-        tv.usesFindBar = true
-        tv.isIncrementalSearchingEnabled = true
 
         if editable {
             tv.insertionPointColor = AppColors.accentGreen
@@ -864,6 +949,9 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
     func textDidChange(_ notification: Notification) {
         updatePlaceholderVisibility()
         scheduleProcessing()
+        if !searchField.stringValue.isEmpty {
+            performSearch()
+        }
     }
 
     private func scheduleProcessing() {
@@ -1104,7 +1192,10 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
         let text = textView.string
         let base64 = Data(text.utf8).base64EncodedString()
-        webView.evaluateJavaScript("renderMarkdown(atob('\(base64)'))", completionHandler: nil)
+        webView.evaluateJavaScript("renderMarkdown(atob('\(base64)'))") { [weak self] _, _ in
+            guard let self = self, !self.searchField.stringValue.isEmpty else { return }
+            self.highlightWebViewMatches(query: self.searchField.stringValue)
+        }
     }
 
     private func renderJSONFormat() {
@@ -1169,10 +1260,98 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
             .paragraphStyle: paragraphStyle,
         ])
         outputTextView.textStorage?.setAttributedString(attributed)
+        if !searchField.stringValue.isEmpty {
+            highlightMatches(in: outputTextView, query: searchField.stringValue)
+        }
     }
 
     private func updatePlaceholderVisibility() {
         placeholderLabel.isHidden = !textView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // MARK: - Search
+
+    @objc
+    private func searchFieldChanged(_ sender: NSSearchField) {
+        searchTimer?.invalidate()
+        searchTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { [weak self] _ in
+            self?.performSearch()
+        }
+    }
+
+    private func performSearch() {
+        let query = searchField.stringValue
+        guard !query.isEmpty else {
+            clearSearchHighlights()
+            matchCountLabel.isHidden = true
+            return
+        }
+
+        var totalMatches = 0
+
+        // Highlight in editor text view
+        totalMatches += highlightMatches(in: textView, query: query)
+
+        // Highlight in output text view (JSON modes)
+        if !outputScrollView.isHidden {
+            totalMatches += highlightMatches(in: outputTextView, query: query)
+        }
+
+        // Highlight in WebView (markdown mode)
+        if !webView.isHidden {
+            highlightWebViewMatches(query: query)
+            // WebView matches counted via JS callback
+        }
+
+        matchCountLabel.stringValue = totalMatches == 1 ? "1 match" : "\(totalMatches) matches"
+        matchCountLabel.isHidden = false
+    }
+
+    @discardableResult
+    private func highlightMatches(in tv: NSTextView, query: String) -> Int {
+        guard let layoutManager = tv.layoutManager, let textStorage = tv.textStorage else { return 0 }
+        let fullRange = NSRange(location: 0, length: textStorage.length)
+
+        // Clear previous highlights
+        layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: fullRange)
+
+        let text = textStorage.string as NSString
+        var searchRange = NSRange(location: 0, length: text.length)
+        var matchCount = 0
+
+        while searchRange.location < text.length {
+            let foundRange = text.range(of: query, options: .caseInsensitive, range: searchRange)
+            guard foundRange.location != NSNotFound else { break }
+
+            layoutManager.addTemporaryAttribute(.backgroundColor, value: AppColors.searchHighlight, forCharacterRange: foundRange)
+            matchCount += 1
+
+            searchRange.location = foundRange.location + foundRange.length
+            searchRange.length = text.length - searchRange.location
+        }
+
+        return matchCount
+    }
+
+    private func highlightWebViewMatches(query: String) {
+        let escaped = query
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        let js = "highlightSearchMatches('\(escaped)')"
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func clearSearchHighlights() {
+        if let lm = textView.layoutManager, let ts = textView.textStorage {
+            lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: ts.length))
+        }
+        if let lm = outputTextView.layoutManager, let ts = outputTextView.textStorage {
+            lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: ts.length))
+        }
+        if isTemplateLoaded {
+            webView.evaluateJavaScript("clearSearchHighlights()", completionHandler: nil)
+        }
     }
 
     // MARK: - Public Methods
@@ -1201,6 +1380,7 @@ final class OverlayViewController: NSViewController, NSTextViewDelegate, WKNavig
 
     deinit {
         renderTimer?.invalidate()
+        searchTimer?.invalidate()
         if let monitor = hotkeyEventMonitor {
             NSEvent.removeMonitor(monitor)
         }
