@@ -248,6 +248,50 @@
     const rendered = md.render(text);
     content.innerHTML = applyTaskListSyntax(rendered);
   }
+
+  function highlightSearchMatches(query) {
+    clearSearchHighlights();
+    if (!query) return;
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null);
+    const lowerQuery = query.toLowerCase();
+    const nodesToProcess = [];
+    while (walker.nextNode()) {
+      if (walker.currentNode.nodeValue.toLowerCase().includes(lowerQuery)) {
+        nodesToProcess.push(walker.currentNode);
+      }
+    }
+    nodesToProcess.forEach(function(node) {
+      const text = node.nodeValue;
+      const frag = document.createDocumentFragment();
+      let remaining = text;
+      while (remaining.length > 0) {
+        const idx = remaining.toLowerCase().indexOf(lowerQuery);
+        if (idx === -1) {
+          frag.appendChild(document.createTextNode(remaining));
+          break;
+        }
+        if (idx > 0) frag.appendChild(document.createTextNode(remaining.substring(0, idx)));
+        const mark = document.createElement("mark");
+        mark.className = "search-highlight";
+        mark.style.background = "rgba(217, 191, 51, 0.45)";
+        mark.style.color = "inherit";
+        mark.style.borderRadius = "2px";
+        mark.textContent = remaining.substring(idx, idx + lowerQuery.length);
+        frag.appendChild(mark);
+        remaining = remaining.substring(idx + lowerQuery.length);
+      }
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+
+  function clearSearchHighlights() {
+    const marks = content.querySelectorAll("mark.search-highlight");
+    marks.forEach(function(mark) {
+      const parent = mark.parentNode;
+      parent.replaceChild(document.createTextNode(mark.textContent), mark);
+      parent.normalize();
+    });
+  }
 </script>
 </body>
 </html>

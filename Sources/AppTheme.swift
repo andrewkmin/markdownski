@@ -35,6 +35,9 @@ enum AppColors {
     static let tabBarBackground = NSColor(calibratedWhite: 1.0, alpha: 0.06)
     static let tabSelected = NSColor(calibratedWhite: 1.0, alpha: 0.14)
     static let tabSelectedBorder = NSColor(calibratedWhite: 1.0, alpha: 0.18)
+
+    // Search
+    static let searchHighlight = NSColor(calibratedRed: 0.85, green: 0.75, blue: 0.2, alpha: 0.45)
 }
 
 enum Layout {
